@@ -152,10 +152,16 @@ export class Player {
 
     let dx = 0;
     let dy = 0;
-    if (input.keys['KeyW'] || input.keys['ArrowUp']) dy -= 1;
-    if (input.keys['KeyS'] || input.keys['ArrowDown']) dy += 1;
-    if (input.keys['KeyA'] || input.keys['ArrowLeft']) dx -= 1;
-    if (input.keys['KeyD'] || input.keys['ArrowRight']) dx += 1;
+
+    if (input.moveDx !== undefined && input.moveDy !== undefined && (input.moveDx !== 0 || input.moveDy !== 0)) {
+      dx = input.moveDx;
+      dy = input.moveDy;
+    } else {
+      if (input.keys['KeyW'] || input.keys['ArrowUp']) dy -= 1;
+      if (input.keys['KeyS'] || input.keys['ArrowDown']) dy += 1;
+      if (input.keys['KeyA'] || input.keys['ArrowLeft']) dx -= 1;
+      if (input.keys['KeyD'] || input.keys['ArrowRight']) dx += 1;
+    }
 
     this.isMoving = dx !== 0 || dy !== 0;
     const isSprinting = input.keys['ShiftLeft'] || input.keys['ShiftRight'];
