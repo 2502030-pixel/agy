@@ -2,6 +2,7 @@
   "name": "island-survival",
   "version": "1.0.0",
   "description": "ブラウザで遊べる本格サバイバルクラフトゲーム",
+  "type": "module",
   "scripts": {
     "start": "python3 -m http.server 3000"
   },
