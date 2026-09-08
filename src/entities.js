@@ -1,6 +1,7 @@
-// 現代的ゲームビジュアルのエンティティ描画（ウサギ、シカ、ゾンビ、オオカミ、建築物、パーティクル）
+// 三人称（2.5D クォータービュー）対応のエンティティ描画（ドロップ品、建築物、動物、敵、パーティクル、ポップアップ）
 
 import { ITEMS } from './items.js';
+import { PITCH_RATIO } from './world.js';
 
 // ドロップアイテム
 export class DroppedItem {
@@ -36,19 +37,20 @@ export class DroppedItem {
   render(ctx, camera) {
     const sx = this.x - camera.x;
     const floatY = Math.sin(this.floatTimer) * 5;
-    const sy = (this.baseY - camera.y) + floatY;
+    const groundSy = (this.baseY * PITCH_RATIO) - camera.y;
+    const sy = groundSy - 10 + floatY; // 浮遊
 
     const itemDef = ITEMS[this.itemId];
     if (!itemDef) return;
 
-    // 接地ソフトシャドウ（浮遊に合わせて伸縮）
+    // 接地ソフトシャドウ
     const shadowScale = 1 - (floatY + 5) / 30;
-    ctx.fillStyle = `rgba(10, 15, 25, ${0.28 * shadowScale})`;
+    ctx.fillStyle = `rgba(10, 15, 25, ${0.3 * shadowScale})`;
     ctx.beginPath();
-    ctx.ellipse(sx, this.baseY - camera.y + 8, 10 * shadowScale, 5 * shadowScale, 0, 0, Math.PI * 2);
+    ctx.ellipse(sx, groundSy + 2, 10 * shadowScale, 4.5 * shadowScale, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // アイテム背後のソフトグローサークル
+    // アイテム背後グロー
     const glowGrad = ctx.createRadialGradient(sx, sy, 2, sx, sy, 16);
     glowGrad.addColorStop(0, 'rgba(255, 255, 255, 0.45)');
     glowGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
@@ -57,13 +59,11 @@ export class DroppedItem {
     ctx.arc(sx, sy, 16, 0, Math.PI * 2);
     ctx.fill();
 
-    // アイテムアイコン
     ctx.font = '20px serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(itemDef.icon, sx, sy);
 
-    // スタック個数バッジ
     if (this.count > 1) {
       ctx.fillStyle = '#1e232d';
       ctx.beginPath();
@@ -97,11 +97,10 @@ export class Building {
     this.animTime += dt;
 
     if (this.type === 'campfire' || this.type === 'torch') {
-      // 焚き火の火の粉（上昇＆揺らぎ）
       if (Math.random() < 0.35) {
         particles.push(new Particle(
           this.x + (Math.random() - 0.5) * 12,
-          this.y - 6,
+          this.y,
           (Math.random() - 0.5) * 24,
           -Math.random() * 45 - 20,
           Math.random() < 0.5 ? '#ffb300' : '#ff5722',
@@ -109,7 +108,6 @@ export class Building {
           2.5
         ));
       }
-      // 煙の微粒子
       if (Math.random() < 0.15) {
         particles.push(new Particle(
           this.x + (Math.random() - 0.5) * 8,
@@ -126,211 +124,202 @@ export class Building {
 
   render(ctx, camera) {
     const sx = this.x - camera.x;
-    const sy = this.y - camera.y;
+    const sy = (this.y * PITCH_RATIO) - camera.y;
 
-    // 影
+    // 接地影
     ctx.fillStyle = 'rgba(8, 12, 20, 0.35)';
     ctx.beginPath();
-    ctx.ellipse(sx, sy + 10, 20, 9, 0, 0, Math.PI * 2);
+    ctx.ellipse(sx, sy + 4, 20, 7, 0, 0, Math.PI * 2);
     ctx.fill();
 
     if (this.type === 'campfire') {
-      // 焚き火の台座の石組み（円形に配置された石）
+      // 台座の石組み
       ctx.fillStyle = '#546e7a';
       for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) {
-        const stoneX = sx + Math.cos(a) * 14;
-        const stoneY = sy + Math.sin(a) * 7 + 4;
+        const stoneX = sx + Math.cos(a) * 15;
+        const stoneY = sy + Math.sin(a) * 6;
         ctx.beginPath();
-        ctx.ellipse(stoneX, stoneY, 4.5, 3.5, 0, 0, Math.PI * 2);
+        ctx.ellipse(stoneX, stoneY, 4.5, 3, 0, 0, Math.PI * 2);
         ctx.fill();
       }
 
-      // 薪の組み木（交差する角材）
+      // 薪
       ctx.fillStyle = '#4e342e';
       ctx.save();
-      ctx.translate(sx, sy + 2);
+      ctx.translate(sx, sy - 2);
       ctx.rotate(0.5);
       ctx.fillRect(-12, -3, 24, 6);
       ctx.rotate(-1.0);
       ctx.fillRect(-12, -3, 24, 6);
       ctx.restore();
 
-      // 赤熱した炭のコア（Glowing embers）
+      // 炭コア
       ctx.fillStyle = '#ff3d00';
       ctx.beginPath();
-      ctx.arc(sx, sy + 1, 7, 0, Math.PI * 2);
+      ctx.arc(sx, sy - 3, 7, 0, Math.PI * 2);
       ctx.fill();
 
-      // 躍動する炎（マルチレイヤー）
+      // 躍動する炎
       const fTime = this.animTime * 6;
       const flameOffX = Math.sin(fTime) * 3;
-      const flameH = 16 + Math.sin(fTime * 1.5) * 5;
+      const flameH = 20 + Math.sin(fTime * 1.5) * 5;
 
-      // 外炎（深紅・オレンジ）
       ctx.fillStyle = '#ff6f00';
       ctx.beginPath();
-      ctx.moveTo(sx - 9, sy + 3);
+      ctx.moveTo(sx - 9, sy);
       ctx.quadraticCurveTo(sx - 10, sy - flameH * 0.5, sx + flameOffX, sy - flameH);
-      ctx.quadraticCurveTo(sx + 10, sy - flameH * 0.5, sx + 9, sy + 3);
+      ctx.quadraticCurveTo(sx + 10, sy - flameH * 0.5, sx + 9, sy);
       ctx.closePath();
       ctx.fill();
 
-      // 内炎（イエロー・ホワイト）
       ctx.fillStyle = '#fff59d';
       ctx.beginPath();
-      ctx.moveTo(sx - 5, sy + 2);
+      ctx.moveTo(sx - 5, sy - 1);
       ctx.quadraticCurveTo(sx - 5, sy - flameH * 0.4, sx + flameOffX * 0.7, sy - flameH * 0.75);
-      ctx.quadraticCurveTo(sx + 5, sy - flameH * 0.4, sx + 5, sy + 2);
+      ctx.quadraticCurveTo(sx + 5, sy - flameH * 0.4, sx + 5, sy - 1);
       ctx.closePath();
       ctx.fill();
 
     } else if (this.type === 'workbench') {
-      // 頑丈な作業台（木目のテーブルトップと道具）
-      // 天板
-      const benchGrad = ctx.createLinearGradient(sx - 18, sy - 14, sx + 18, sy + 14);
+      // 作業台（手前正面に見える三人称モデル）
+      const benchGrad = ctx.createLinearGradient(sx - 18, sy - 16, sx + 18, sy + 8);
       benchGrad.addColorStop(0, '#8d6e63');
       benchGrad.addColorStop(0.5, '#6d4c41');
       benchGrad.addColorStop(1, '#4e342e');
       ctx.fillStyle = benchGrad;
       ctx.beginPath();
-      ctx.roundRect(sx - 18, sy - 14, 36, 26, 4);
+      ctx.roundRect(sx - 18, sy - 18, 36, 24, 3);
       ctx.fill();
 
-      // 縁取り
+      // 作業台の脚部（立体感）
+      ctx.fillStyle = '#3e2723';
+      ctx.fillRect(sx - 16, sy + 6, 6, 8);
+      ctx.fillRect(sx + 10, sy + 6, 6, 8);
+
       ctx.strokeStyle = '#3e2723';
-      ctx.lineWidth = 2;
-      ctx.stroke();
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(sx - 18, sy - 18, 36, 24);
 
-      // 金敷き / 万力 (Vise)
+      // 万力・金敷き
       ctx.fillStyle = '#37474f';
-      ctx.fillRect(sx - 14, sy - 10, 8, 6);
+      ctx.fillRect(sx - 14, sy - 14, 8, 6);
       ctx.fillStyle = '#78909c';
-      ctx.fillRect(sx - 12, sy - 8, 4, 2);
+      ctx.fillRect(sx - 12, sy - 12, 4, 2);
 
-      // 設計図ロール
+      // 巻物
       ctx.fillStyle = '#fff9c4';
-      ctx.fillRect(sx + 2, sy - 8, 11, 4);
-      ctx.fillStyle = '#b0bec5';
-      ctx.fillRect(sx + 3, sy - 1, 10, 3); // 鋸
+      ctx.fillRect(sx + 2, sy - 12, 11, 4);
 
     } else if (this.type === 'wall') {
-      // 重厚な丸太防壁
+      // 木の防壁（垂直にそびえ立つ三人称ビルディング）
       ctx.fillStyle = '#4e342e';
       ctx.beginPath();
-      ctx.roundRect(sx - 18, sy - 18, 36, 36, 3);
+      ctx.roundRect(sx - 18, sy - 28, 36, 36, 2);
       ctx.fill();
 
-      // 縦の木材スリット
       ctx.fillStyle = '#795548';
-      ctx.fillRect(sx - 16, sy - 16, 10, 32);
-      ctx.fillRect(sx - 5, sy - 16, 10, 32);
-      ctx.fillRect(sx + 6, sy - 16, 10, 32);
+      ctx.fillRect(sx - 16, sy - 26, 10, 32);
+      ctx.fillRect(sx - 5, sy - 26, 10, 32);
+      ctx.fillRect(sx + 6, sy - 26, 10, 32);
 
-      // 鉄の補強帯
+      // 鉄バンド
       ctx.fillStyle = '#37474f';
-      ctx.fillRect(sx - 18, sy - 8, 36, 4);
-      ctx.fillRect(sx - 18, sy + 6, 36, 4);
+      ctx.fillRect(sx - 18, sy - 16, 36, 4);
+      ctx.fillRect(sx - 18, sy - 2, 36, 4);
 
-      // 鋲（リベット）
+      // リベット
       ctx.fillStyle = '#cfd8dc';
       for (const rx of [-12, 0, 12]) {
         ctx.beginPath();
-        ctx.arc(sx + rx, sy - 6, 1.5, 0, Math.PI * 2);
-        ctx.arc(sx + rx, sy + 8, 1.5, 0, Math.PI * 2);
+        ctx.arc(sx + rx, sy - 14, 1.5, 0, Math.PI * 2);
+        ctx.arc(sx + rx, sy, 1.5, 0, Math.PI * 2);
         ctx.fill();
       }
 
     } else if (this.type === 'door') {
-      // ドア（開閉アニメーション付き）
       if (this.isOpen) {
-        // 開いたドア
-        ctx.fillStyle = 'rgba(40, 50, 60, 0.4)';
-        ctx.fillRect(sx - 16, sy - 16, 32, 32);
+        ctx.fillStyle = 'rgba(40, 50, 60, 0.35)';
+        ctx.fillRect(sx - 16, sy - 28, 32, 36);
 
         ctx.fillStyle = '#6d4c41';
         ctx.beginPath();
-        ctx.roundRect(sx - 18, sy - 18, 10, 36, 2);
+        ctx.roundRect(sx - 18, sy - 28, 8, 36, 2);
         ctx.fill();
-        ctx.fillStyle = '#ffd54f';
-        ctx.fillRect(sx - 12, sy, 3, 3);
       } else {
-        // 閉じたドア
         ctx.fillStyle = '#5d4037';
         ctx.beginPath();
-        ctx.roundRect(sx - 18, sy - 18, 36, 36, 3);
+        ctx.roundRect(sx - 18, sy - 28, 36, 36, 2);
         ctx.fill();
 
         ctx.strokeStyle = '#3e2723';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(sx - 14, sy - 14, 28, 28);
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(sx - 14, sy - 24, 28, 28);
 
-        // 金色のノブ
+        // 金のドアノブ
         ctx.fillStyle = '#ffb300';
         ctx.beginPath();
-        ctx.arc(sx + 8, sy, 3.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#fff8e1';
-        ctx.beginPath();
-        ctx.arc(sx + 7, sy - 1, 1.2, 0, Math.PI * 2);
+        ctx.arc(sx + 8, sy - 10, 3.5, 0, Math.PI * 2);
         ctx.fill();
       }
 
     } else if (this.type === 'chest') {
-      // 豪華な木製チェスト
-      ctx.fillStyle = '#5d4037';
+      // 立体チェスト（蓋と本体）
+      // 本体
+      ctx.fillStyle = '#4e342e';
       ctx.beginPath();
-      ctx.roundRect(sx - 16, sy - 12, 32, 24, 3);
+      ctx.roundRect(sx - 16, sy - 12, 32, 20, 2);
       ctx.fill();
 
-      // 金具枠
-      ctx.strokeStyle = '#ffb300';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(sx - 16, sy - 12, 32, 24);
+      // 蓋（斜め上）
+      ctx.fillStyle = '#6d4c41';
+      ctx.beginPath();
+      ctx.roundRect(sx - 16, sy - 18, 32, 10, 2);
+      ctx.fill();
 
-      // 中央の鍵穴金具
+      ctx.strokeStyle = '#ffb300';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(sx - 16, sy - 12, 32, 20);
+
+      // 金具
       ctx.fillStyle = '#ffc107';
-      ctx.fillRect(sx - 4, sy - 4, 8, 9);
+      ctx.fillRect(sx - 4, sy - 10, 8, 8);
       ctx.fillStyle = '#212121';
       ctx.beginPath();
-      ctx.arc(sx, sy, 2, 0, Math.PI * 2);
+      ctx.arc(sx, sy - 6, 1.8, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillRect(sx - 1, sy, 2, 3);
 
     } else if (this.type === 'torch') {
-      // 松明
       ctx.fillStyle = '#4e342e';
-      ctx.fillRect(sx - 3, sy - 8, 6, 18);
+      ctx.fillRect(sx - 3, sy - 16, 6, 20);
 
-      // 炎
       const fTime = this.animTime * 7;
       const fH = 10 + Math.sin(fTime) * 3;
       ctx.fillStyle = '#ff5722';
       ctx.beginPath();
-      ctx.arc(sx, sy - 8, 6, 0, Math.PI * 2);
+      ctx.arc(sx, sy - 16, 6, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = '#ffeb3b';
       ctx.beginPath();
-      ctx.arc(sx, sy - 9, 3.5, 0, Math.PI * 2);
+      ctx.arc(sx, sy - 17, 3.5, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // 耐久度バー
     if (this.hp < this.maxHp) {
       const w = 30;
       const h = 4;
       const pct = Math.max(0, this.hp / this.maxHp);
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      ctx.fillRect(sx - w / 2, sy - 24, w, h);
+      ctx.fillRect(sx - w / 2, sy - 34, w, h);
       ctx.fillStyle = '#4caf50';
-      ctx.fillRect(sx - w / 2, sy - 24, w * pct, h);
+      ctx.fillRect(sx - w / 2, sy - 34, w * pct, h);
     }
   }
 }
 
-// 野生動物（絵文字を使わず、高品質ベクターアートで描画）
+// 野生動物
 export class Animal {
   constructor(type, x, y) {
-    this.type = type; // 'rabbit', 'deer'
+    this.type = type;
     this.x = x;
     this.y = y;
     this.hp = type === 'deer' ? 30 : 12;
@@ -339,7 +328,7 @@ export class Animal {
     this.speed = type === 'deer' ? 70 : 90;
     this.vx = 0;
     this.vy = 0;
-    this.facing = 1; // 1: 右, -1: 左
+    this.facing = 1;
     this.wanderTimer = Math.random() * 3;
     this.fleeTimer = 0;
     this.animTime = Math.random() * 10;
@@ -391,7 +380,7 @@ export class Animal {
 
   render(ctx, camera) {
     const sx = this.x - camera.x;
-    const sy = this.y - camera.y;
+    const sy = (this.y * PITCH_RATIO) - camera.y;
     const isMoving = Math.hypot(this.vx, this.vy) > 8;
 
     ctx.save();
@@ -399,143 +388,125 @@ export class Animal {
     ctx.scale(this.facing, 1);
 
     if (this.type === 'rabbit') {
-      // ウサギ（ホッピングアニメーション）
       const hop = isMoving ? Math.abs(Math.sin(this.animTime * 10)) * 6 : 0;
 
-      // 影
       ctx.fillStyle = 'rgba(8, 12, 18, 0.25)';
       ctx.beginPath();
-      ctx.ellipse(0, 7, 9, 4, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, 4, 9, 3.5, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      // 体
       ctx.fillStyle = '#e0d8cc';
       ctx.beginPath();
-      ctx.ellipse(0, 1 - hop, 8, 6.5, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, -4 - hop, 8, 6.5, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      // 白いお腹
       ctx.fillStyle = '#fbf9f5';
       ctx.beginPath();
-      ctx.ellipse(2, 3 - hop, 5, 4, 0, 0, Math.PI * 2);
+      ctx.ellipse(2, -2 - hop, 5, 4, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      // 頭
       ctx.fillStyle = '#e0d8cc';
       ctx.beginPath();
-      ctx.arc(5, -3 - hop, 5, 0, Math.PI * 2);
+      ctx.arc(5, -8 - hop, 5, 0, Math.PI * 2);
       ctx.fill();
 
-      // 耳（進行方向になびく）
       ctx.fillStyle = '#d2c4b2';
       ctx.beginPath();
-      ctx.ellipse(-1, -10 - hop, 2.5, 6, -0.2, 0, Math.PI * 2);
+      ctx.ellipse(-1, -15 - hop, 2.5, 6, -0.2, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = '#f8bbd0'; // 内側のピンク
+      ctx.fillStyle = '#f8bbd0';
       ctx.beginPath();
-      ctx.ellipse(-1, -10 - hop, 1.2, 4.5, -0.2, 0, Math.PI * 2);
+      ctx.ellipse(-1, -15 - hop, 1.2, 4.5, -0.2, 0, Math.PI * 2);
       ctx.fill();
 
-      // 目
       ctx.fillStyle = '#111';
       ctx.beginPath();
-      ctx.arc(7, -4 - hop, 1.2, 0, Math.PI * 2);
+      ctx.arc(7, -9 - hop, 1.2, 0, Math.PI * 2);
       ctx.fill();
 
-      // しっぽ
       ctx.fillStyle = '#fff';
       ctx.beginPath();
-      ctx.arc(-8, 1 - hop, 2.8, 0, Math.PI * 2);
+      ctx.arc(-8, -4 - hop, 2.8, 0, Math.PI * 2);
       ctx.fill();
 
     } else if (this.type === 'deer') {
-      // シカ（しなやかな体、角、足の歩行アニメーション）
       const legWalk = isMoving ? Math.sin(this.animTime * 8) * 4 : 0;
 
-      // 影
       ctx.fillStyle = 'rgba(8, 12, 18, 0.28)';
       ctx.beginPath();
-      ctx.ellipse(0, 12, 16, 6, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, 6, 16, 5, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      // 脚（4本）
+      // 4本足
       ctx.strokeStyle = '#5d4037';
       ctx.lineWidth = 2.5;
-      // 後ろ脚
       ctx.beginPath();
-      ctx.moveTo(-8, 3);
-      ctx.lineTo(-9 + legWalk, 12);
-      ctx.moveTo(-5, 3);
-      ctx.lineTo(-4 - legWalk, 12);
-      // 前脚
-      ctx.moveTo(8, 3);
-      ctx.lineTo(9 - legWalk, 12);
-      ctx.moveTo(11, 3);
-      ctx.lineTo(10 + legWalk, 12);
+      ctx.moveTo(-8, -2);
+      ctx.lineTo(-9 + legWalk, 6);
+      ctx.moveTo(-5, -2);
+      ctx.lineTo(-4 - legWalk, 6);
+      ctx.moveTo(8, -2);
+      ctx.lineTo(9 - legWalk, 6);
+      ctx.moveTo(11, -2);
+      ctx.lineTo(10 + legWalk, 6);
       ctx.stroke();
 
-      // 胴体（優美なカーブ）
-      const bodyGrad = ctx.createLinearGradient(-12, -8, 12, 8);
+      const bodyGrad = ctx.createLinearGradient(-12, -14, 12, 2);
       bodyGrad.addColorStop(0, '#a16538');
       bodyGrad.addColorStop(1, '#7a421f');
       ctx.fillStyle = bodyGrad;
       ctx.beginPath();
-      ctx.ellipse(0, 0, 14, 8, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, -6, 14, 8, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      // 背中の白い斑点（バンビ風）
       ctx.fillStyle = '#fff4e6';
-      for (const spot of [[-4, -3], [0, -4], [4, -3]]) {
+      for (const spot of [[-4, -9], [0, -10], [4, -9]]) {
         ctx.beginPath();
         ctx.arc(spot[0], spot[1], 1.4, 0, Math.PI * 2);
         ctx.fill();
       }
 
-      // 首と頭
       ctx.fillStyle = '#8d4e28';
       ctx.beginPath();
-      ctx.moveTo(8, -2);
-      ctx.lineTo(14, -12);
-      ctx.lineTo(19, -10);
-      ctx.lineTo(13, 2);
+      ctx.moveTo(8, -8);
+      ctx.lineTo(14, -18);
+      ctx.lineTo(19, -16);
+      ctx.lineTo(13, -4);
       ctx.closePath();
       ctx.fill();
 
-      // 枝角 (Antlers)
       ctx.strokeStyle = '#4e342e';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(15, -12);
-      ctx.lineTo(16, -20);
-      ctx.lineTo(12, -23);
-      ctx.moveTo(16, -18);
-      ctx.lineTo(20, -22);
+      ctx.moveTo(15, -18);
+      ctx.lineTo(16, -26);
+      ctx.lineTo(12, -29);
+      ctx.moveTo(16, -24);
+      ctx.lineTo(20, -28);
       ctx.stroke();
 
-      // 目
       ctx.fillStyle = '#000';
       ctx.beginPath();
-      ctx.arc(17, -10, 1.5, 0, Math.PI * 2);
+      ctx.arc(17, -16, 1.5, 0, Math.PI * 2);
       ctx.fill();
     }
 
     ctx.restore();
 
-    // HPゲージ
     if (this.hp < this.maxHp) {
       const w = 24;
       ctx.fillStyle = '#000';
-      ctx.fillRect(sx - w / 2, sy - this.radius - 14, w, 3);
+      ctx.fillRect(sx - w / 2, sy - this.radius - 20, w, 3);
       ctx.fillStyle = '#4caf50';
-      ctx.fillRect(sx - w / 2, sy - this.radius - 14, w * (this.hp / this.maxHp), 3);
+      ctx.fillRect(sx - w / 2, sy - this.radius - 20, w * (this.hp / this.maxHp), 3);
     }
   }
 }
 
-// 敵モンスター（ゾンビ、オオカミ）
+// 敵モンスター
 export class Enemy {
   constructor(type, x, y) {
-    this.type = type; // 'zombie', 'wolf'
+    this.type = type;
     this.x = x;
     this.y = y;
     this.hp = type === 'wolf' ? 35 : 45;
@@ -544,7 +515,7 @@ export class Enemy {
     this.speed = type === 'wolf' ? 88 : 58;
     this.damage = type === 'wolf' ? 12 : 16;
     this.attackCooldown = 0;
-    this.attackRange = 32;
+    this.attackRange = 34;
     this.hitShake = 0;
     this.facing = 1;
     this.animTime = Math.random() * 10;
@@ -610,151 +581,134 @@ export class Enemy {
 
   render(ctx, camera) {
     const sx = this.x - camera.x + (this.hitShake > 0 ? (Math.random() - 0.5) * 6 : 0);
-    const sy = this.y - camera.y;
+    const sy = (this.y * PITCH_RATIO) - camera.y;
 
     ctx.save();
     ctx.translate(sx, sy);
     ctx.scale(this.facing, 1);
 
-    // 影
     ctx.fillStyle = 'rgba(8, 12, 20, 0.38)';
     ctx.beginPath();
-    ctx.ellipse(0, 10, this.radius * 0.9, 5, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 6, this.radius * 0.9, 4, 0, 0, Math.PI * 2);
     ctx.fill();
 
     if (this.type === 'zombie') {
-      // ゾンビ（よろめき、破れた服、発光する赤い眼光）
       const wobble = Math.sin(this.animTime * 4) * 3;
       const armSwing = Math.sin(this.animTime * 4) * 4;
 
-      // 腐敗した胴体
       ctx.fillStyle = '#2e4a36';
       ctx.beginPath();
-      ctx.roundRect(-8, -10 + wobble, 16, 18, 3);
+      ctx.roundRect(-8, -18 + wobble, 16, 18, 3);
       ctx.fill();
 
-      // ボロボロの青いシャツ
       ctx.fillStyle = '#37474f';
-      ctx.fillRect(-7, -8 + wobble, 14, 10);
+      ctx.fillRect(-7, -16 + wobble, 14, 10);
 
-      // 脚
       ctx.fillStyle = '#263238';
-      ctx.fillRect(-6, 8 + wobble, 5, 8);
-      ctx.fillRect(1, 8 - wobble, 5, 8);
+      ctx.fillRect(-6, 0 + wobble, 5, 8);
+      ctx.fillRect(1, 0 - wobble, 5, 8);
 
-      // 前に突き出した腕（ゾンビポーズ）
       ctx.fillStyle = '#3d6346';
-      ctx.fillRect(6, -6 + wobble + armSwing, 12, 4);
+      ctx.fillRect(6, -14 + wobble + armSwing, 12, 4);
 
-      // 頭部
       ctx.fillStyle = '#3d6346';
       ctx.beginPath();
-      ctx.arc(0, -15 + wobble, 7, 0, Math.PI * 2);
+      ctx.arc(0, -23 + wobble, 7, 0, Math.PI * 2);
       ctx.fill();
 
-      // 発光する赤い眼（Glowing red eyes）
+      // 赤く光る目
       ctx.fillStyle = '#ff1744';
       ctx.beginPath();
-      ctx.arc(3, -15 + wobble, 1.8, 0, Math.PI * 2);
+      ctx.arc(3, -23 + wobble, 1.8, 0, Math.PI * 2);
       ctx.fill();
 
-      // 目のグロー
       ctx.fillStyle = 'rgba(255, 23, 68, 0.4)';
       ctx.beginPath();
-      ctx.arc(3, -15 + wobble, 4, 0, Math.PI * 2);
+      ctx.arc(3, -23 + wobble, 4, 0, Math.PI * 2);
       ctx.fill();
 
     } else if (this.type === 'wolf') {
-      // オオカミ（疾走、逆立った毛並み、ギラつく黄色い目）
       const legRun = Math.sin(this.animTime * 12) * 5;
 
-      // 脚
       ctx.strokeStyle = '#263238';
       ctx.lineWidth = 2.5;
       ctx.beginPath();
-      ctx.moveTo(-10, 2);
-      ctx.lineTo(-12 + legRun, 11);
-      ctx.moveTo(-6, 2);
-      ctx.lineTo(-4 - legRun, 11);
-      ctx.moveTo(8, 2);
-      ctx.lineTo(6 - legRun, 11);
-      ctx.moveTo(12, 2);
-      ctx.lineTo(14 + legRun, 11);
+      ctx.moveTo(-10, -4);
+      ctx.lineTo(-12 + legRun, 5);
+      ctx.moveTo(-6, -4);
+      ctx.lineTo(-4 - legRun, 5);
+      ctx.moveTo(8, -4);
+      ctx.lineTo(6 - legRun, 5);
+      ctx.moveTo(12, -4);
+      ctx.lineTo(14 + legRun, 5);
       ctx.stroke();
 
-      // 胴体（獰猛な流線型）
-      const wolfGrad = ctx.createLinearGradient(-14, -8, 14, 8);
+      const wolfGrad = ctx.createLinearGradient(-14, -12, 14, 4);
       wolfGrad.addColorStop(0, '#455a64');
       wolfGrad.addColorStop(0.6, '#37474f');
       wolfGrad.addColorStop(1, '#212121');
       ctx.fillStyle = wolfGrad;
       ctx.beginPath();
-      ctx.ellipse(0, 0, 15, 7.5, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, -6, 15, 7.5, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      // 首と頭部
       ctx.fillStyle = '#37474f';
       ctx.beginPath();
-      ctx.moveTo(8, -4);
-      ctx.lineTo(16, -10);
-      ctx.lineTo(21, -3);
-      ctx.lineTo(12, 4);
+      ctx.moveTo(8, -10);
+      ctx.lineTo(16, -16);
+      ctx.lineTo(21, -9);
+      ctx.lineTo(12, -2);
       ctx.closePath();
       ctx.fill();
 
-      // 尖った耳
       ctx.fillStyle = '#263238';
       ctx.beginPath();
-      ctx.moveTo(13, -10);
-      ctx.lineTo(15, -17);
-      ctx.lineTo(17, -9);
+      ctx.moveTo(13, -16);
+      ctx.lineTo(15, -23);
+      ctx.lineTo(17, -15);
       ctx.closePath();
       ctx.fill();
 
-      // 牙
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();
-      ctx.moveTo(18, -2);
-      ctx.lineTo(19, 2);
-      ctx.lineTo(20, -2);
+      ctx.moveTo(18, -8);
+      ctx.lineTo(19, -4);
+      ctx.lineTo(20, -8);
       ctx.closePath();
       ctx.fill();
 
-      // ギラつく黄色の眼光
       ctx.fillStyle = '#ffd600';
       ctx.beginPath();
-      ctx.arc(17, -6, 1.8, 0, Math.PI * 2);
+      ctx.arc(17, -12, 1.8, 0, Math.PI * 2);
       ctx.fill();
 
-      // 尾
       ctx.strokeStyle = '#37474f';
       ctx.lineWidth = 3.5;
       ctx.beginPath();
-      ctx.moveTo(-13, -2);
-      ctx.quadraticCurveTo(-18, 4, -16, 9);
+      ctx.moveTo(-13, -8);
+      ctx.quadraticCurveTo(-18, -2, -16, 3);
       ctx.stroke();
     }
 
     ctx.restore();
 
-    // HPゲージ
     if (this.hp < this.maxHp) {
       const w = 30;
       const h = 4;
       const pct = Math.max(0, this.hp / this.maxHp);
       ctx.fillStyle = 'rgba(0,0,0,0.8)';
       ctx.beginPath();
-      ctx.roundRect(sx - w / 2, sy - this.radius - 16, w, h, 2);
+      ctx.roundRect(sx - w / 2, sy - this.radius - 24, w, h, 2);
       ctx.fill();
       ctx.fillStyle = '#ff1744';
       ctx.beginPath();
-      ctx.roundRect(sx - w / 2, sy - this.radius - 16, w * pct, h, 2);
+      ctx.roundRect(sx - w / 2, sy - this.radius - 24, w * pct, h, 2);
       ctx.fill();
     }
   }
 }
 
-// パーティクル（破片、火花、煙、血痕、輝き）
+// パーティクル
 export class Particle {
   constructor(x, y, vx, vy, color, life, size = 3) {
     this.x = x;
@@ -778,7 +732,7 @@ export class Particle {
   render(ctx, camera) {
     if (this.life <= 0) return;
     const sx = this.x - camera.x;
-    const sy = this.y - camera.y;
+    const sy = (this.y * PITCH_RATIO) - camera.y;
 
     ctx.save();
     ctx.globalAlpha = Math.max(0, this.life / this.maxLife);
@@ -790,7 +744,7 @@ export class Particle {
   }
 }
 
-// ダメージポップアップ（ポップな浮遊とイージング）
+// ダメージポップアップ
 export class PopupText {
   constructor(text, x, y, color = '#fff') {
     this.text = text;
@@ -811,7 +765,7 @@ export class PopupText {
   render(ctx, camera) {
     if (this.life <= 0) return;
     const sx = this.x - camera.x;
-    const sy = this.y - camera.y;
+    const sy = (this.y * PITCH_RATIO) - camera.y - 20;
 
     ctx.save();
     const alpha = Math.min(1, (this.life / this.maxLife) * 1.5);
