@@ -1,8 +1,9 @@
-// プレイヤーの挙動、ステータス、インベントリ、アクション、および現代的なキャラクター・武器レンダリング
+// 三人称（2.5D クォータービュー / 背後・斜め追従）プレイヤーレンダリング
 
 import { ITEMS } from './items.js';
 import { sound } from './audio.js';
 import { DroppedItem, Particle, PopupText } from './entities.js';
+import { PITCH_RATIO } from './world.js';
 
 export class Player {
   constructor(x, y) {
@@ -13,7 +14,7 @@ export class Player {
     this.sprintSpeed = 210;
     this.vx = 0;
     this.vy = 0;
-    this.angle = 0;
+    this.angle = 0; // マウス方向の角度
 
     // バイタル
     this.maxHp = 100;
@@ -28,20 +29,20 @@ export class Player {
     this.isDead = false;
     this.deathReason = '';
 
-    // インベントリ (24枠、うち最初の8枠がホットバー)
+    // インベントリ
     this.inventory = new Array(24).fill(null);
     this.selectedSlot = 0;
 
-    // 初期アイテム
     this.addItem('stick', 2);
     this.addItem('berry', 3);
 
-    // アニメーション用変数
+    // アニメーション
     this.isAttacking = false;
     this.swingProgress = 0;
     this.attackCooldown = 0;
     this.walkAnimTime = 0;
     this.isMoving = false;
+    this.facing = 1; // 1: 右向き, -1: 左向き
   }
 
   getHeldItem() {
@@ -186,7 +187,7 @@ export class Player {
         }
       }
 
-      const inWater = world.isWater(Math.floor(this.x / 48), Math.floor(this.y / 48));
+      const inWater = world.isWater(Math.floor(this.x / 52), Math.floor(this.y / 52));
       const speedMult = inWater ? 0.6 : 1.0;
 
       if (!blockedX && world.isWalkable(nextX, this.y)) {
@@ -198,6 +199,7 @@ export class Player {
     }
 
     this.angle = input.mouseWorldAngle;
+    this.facing = Math.cos(this.angle) >= 0 ? 1 : -1;
 
     if (this.isAttacking) {
       this.swingProgress += dt * 8.0;
@@ -211,7 +213,6 @@ export class Player {
       this.attackCooldown -= dt;
     }
 
-    // バイタル減少
     this.hunger = Math.max(0, this.hunger - (100 / 480) * dt);
     this.thirst = Math.max(0, this.thirst - (100 / 360) * dt);
 
@@ -221,7 +222,7 @@ export class Player {
       this.hp = Math.min(this.maxHp, this.hp + 2.0 * dt);
     }
 
-    const tileUnder = world.getTile(Math.floor(this.x / 48), Math.floor(this.y / 48));
+    const tileUnder = world.getTile(Math.floor(this.x / 52), Math.floor(this.y / 52));
     if (tileUnder === 1 && input.justPressedWater) {
       this.thirst = Math.min(this.maxThirst, this.thirst + 40);
       sound.drink();
@@ -239,11 +240,10 @@ export class Player {
     const held = this.getHeldItem();
     const itemDef = held ? ITEMS[held.id] : null;
 
-    const reach = 50;
+    const reach = 52;
     const hitX = this.x + Math.cos(this.angle) * reach;
     const hitY = this.y + Math.sin(this.angle) * reach;
 
-    // 1. 敵への攻撃
     for (let i = entities.enemies.length - 1; i >= 0; i--) {
       const e = entities.enemies[i];
       if (Math.hypot(hitX - e.x, hitY - e.y) < e.radius + 20) {
@@ -251,9 +251,8 @@ export class Player {
         e.hp -= dmg;
         e.hitShake = 1.0;
         sound.hitEnemy();
-        popups.push(new PopupText(`-${dmg}`, e.x, e.y - 12, '#ff1744'));
+        popups.push(new PopupText(`-${dmg}`, e.x, e.y, '#ff1744'));
 
-        // クリティカル・血痕パーティクル
         for (let p = 0; p < 5; p++) {
           particles.push(new Particle(e.x, e.y, (Math.random() - 0.5) * 80, (Math.random() - 0.5) * 80, '#c62828', 0.4, 3));
         }
@@ -277,7 +276,6 @@ export class Player {
       }
     }
 
-    // 2. 動物への攻撃
     for (let i = entities.animals.length - 1; i >= 0; i--) {
       const a = entities.animals[i];
       if (Math.hypot(hitX - a.x, hitY - a.y) < a.radius + 20) {
@@ -285,7 +283,7 @@ export class Player {
         a.hp -= dmg;
         a.fleeTimer = 3.0;
         sound.hitEnemy();
-        popups.push(new PopupText(`-${dmg}`, a.x, a.y - 10, '#ff5252'));
+        popups.push(new PopupText(`-${dmg}`, a.x, a.y, '#ff5252'));
 
         this.reduceHeldItemDurability();
 
@@ -303,7 +301,6 @@ export class Player {
       }
     }
 
-    // 3. 資源ノードの採掘・伐採
     for (let i = world.resources.length - 1; i >= 0; i--) {
       const res = world.resources[i];
       if (Math.hypot(hitX - res.x, hitY - res.y) < res.radius + 22) {
@@ -326,7 +323,7 @@ export class Player {
             sound.pickup();
             entities.droppedItems.push(new DroppedItem('berry', 2 + Math.floor(Math.random() * 2), res.x, res.y));
             entities.droppedItems.push(new DroppedItem('fiber', 1, res.x, res.y));
-            popups.push(new PopupText('+ベリー', res.x, res.y - 14, '#66bb6a'));
+            popups.push(new PopupText('+ベリー', res.x, res.y, '#66bb6a'));
           }
           return;
         }
@@ -366,99 +363,114 @@ export class Player {
       this.thirst = Math.min(this.maxThirst, this.thirst + (itemDef.thirstRestore || 0));
       this.hp = Math.min(this.maxHp, this.hp + (itemDef.healthRestore || 0));
       sound.eat();
-      popups.push(new PopupText(`+${itemDef.hungerRestore} 満腹度`, this.x, this.y - 14, '#ffa726'));
+      popups.push(new PopupText(`+${itemDef.hungerRestore} 満腹度`, this.x, this.y, '#ffa726'));
       this.removeItem(this.selectedSlot, 1);
     } else if (itemDef.type === 'medical') {
       if (this.hp >= this.maxHp) return;
       this.hp = Math.min(this.maxHp, this.hp + itemDef.healthRestore);
       sound.eat();
-      popups.push(new PopupText(`+${itemDef.healthRestore} HP`, this.x, this.y - 14, '#66bb6a'));
+      popups.push(new PopupText(`+${itemDef.healthRestore} HP`, this.x, this.y, '#66bb6a'));
       this.removeItem(this.selectedSlot, 1);
     }
   }
 
-  // 美麗なプレイヤーキャラクターと装備ツールの描画
+  // 三人称視点でのキャラクター描画（背中・正面・横顔が見える立体モデル）
   render(ctx, camera) {
     const sx = this.x - camera.x;
-    const sy = this.y - camera.y;
+    const groundSy = (this.y * PITCH_RATIO) - camera.y;
 
     // 接地影
-    ctx.fillStyle = 'rgba(8, 12, 18, 0.38)';
+    ctx.fillStyle = 'rgba(8, 12, 20, 0.38)';
     ctx.beginPath();
-    ctx.ellipse(sx, sy + 8, 16, 8, 0, 0, Math.PI * 2);
+    ctx.ellipse(sx, groundSy + 4, 16, 6, 0, 0, Math.PI * 2);
     ctx.fill();
+
+    const bob = this.isMoving ? Math.sin(this.walkAnimTime) * 3 : 0;
+    const footSwing = this.isMoving ? Math.sin(this.walkAnimTime) * 7 : 0;
+
+    // 向いている方向（上下左右）の判定
+    // sin(angle) < -0.3 : 奥（背中が見える）
+    // sin(angle) > 0.3  : 手前（正面が見える）
+    // それ以外          : 横顔
+    const isBackView = Math.sin(this.angle) < -0.25;
 
     ctx.save();
-    ctx.translate(sx, sy);
-    ctx.rotate(this.angle);
+    ctx.translate(sx, groundSy - 14 + bob);
+    ctx.scale(this.facing, 1);
 
-    // 歩行時のボビング＆足の動き
-    const bob = this.isMoving ? Math.sin(this.walkAnimTime) * 2 : 0;
-    const footSwing = this.isMoving ? Math.sin(this.walkAnimTime) * 6 : 0;
-
-    // ブーツ（足）
+    // 脚・ブーツ（2本）
     ctx.fillStyle = '#212121';
-    // 左足
-    ctx.beginPath();
-    ctx.ellipse(-6, 9 + footSwing, 4.5, 3, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // 右足
-    ctx.beginPath();
-    ctx.ellipse(-6, -9 - footSwing, 4.5, 3, 0, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.fillRect(-6, 8 + footSwing, 5, 8);
+    ctx.fillRect(1, 8 - footSwing, 5, 8);
 
-    // 胴体（冒険者ジャケット・ベルト）
-    const bodyGrad = ctx.createLinearGradient(-12, -12, 12, 12);
+    // 胴体（冒険者ジャケット）
+    const bodyGrad = ctx.createLinearGradient(-10, -10, 10, 10);
     bodyGrad.addColorStop(0, '#1e88e5');
     bodyGrad.addColorStop(1, '#1565c0');
     ctx.fillStyle = bodyGrad;
     ctx.beginPath();
-    ctx.roundRect(-10, -10 + bob, 20, 20, 6);
+    ctx.roundRect(-8, -10, 16, 18, 4);
     ctx.fill();
 
-    // レザーベルトとバックル
-    ctx.fillStyle = '#4e342e';
-    ctx.fillRect(-2, -10 + bob, 5, 20);
-    ctx.fillStyle = '#ffb300';
-    ctx.fillRect(-1, -2 + bob, 3, 4);
+    if (isBackView) {
+      // 背面（三人称背後カメラ）：バックパックが大きく見える
+      ctx.fillStyle = '#4e342e';
+      ctx.beginPath();
+      ctx.roundRect(-6, -8, 12, 14, 3);
+      ctx.fill();
+      ctx.fillStyle = '#ffb300';
+      ctx.fillRect(-2, -4, 4, 3); // バックル
+    } else {
+      // 正面・側面：ベルトと服の合わせ
+      ctx.fillStyle = '#4e342e';
+      ctx.fillRect(-8, 3, 16, 4); // ベルト
+      ctx.fillStyle = '#ffb300';
+      ctx.fillRect(-2, 3, 4, 4);
+    }
 
-    // バックパック
-    ctx.fillStyle = '#5d4037';
-    ctx.beginPath();
-    ctx.roundRect(-15, -7 + bob, 6, 14, 2);
-    ctx.fill();
-
-    // 頭部（サバイバーの髪・顔）
+    // 頭部
     ctx.fillStyle = '#ffcc80';
     ctx.beginPath();
-    ctx.arc(3, 0 + bob, 8, 0, Math.PI * 2);
+    ctx.arc(0, -17, 8, 0, Math.PI * 2);
     ctx.fill();
 
-    // 髪 / バンダナ
-    ctx.fillStyle = '#3e2723';
-    ctx.beginPath();
-    ctx.arc(1, 0 + bob, 8.5, Math.PI * 0.45, Math.PI * 1.55);
-    ctx.fill();
+    if (isBackView) {
+      // 後頭部・髪全体
+      ctx.fillStyle = '#3e2723';
+      ctx.beginPath();
+      ctx.arc(0, -17, 8.5, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // 顔（目と前髪）
+      ctx.fillStyle = '#3e2723';
+      ctx.beginPath();
+      ctx.arc(0, -19, 8.5, Math.PI * 0.9, Math.PI * 2.1);
+      ctx.fill();
 
-    // スイングアニメーション角度
+      // 目
+      ctx.fillStyle = '#111';
+      ctx.beginPath();
+      ctx.arc(3, -16, 1.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // スイングアニメーション
     const held = this.getHeldItem();
     let swingAngle = 0;
     if (this.isAttacking) {
-      swingAngle = (Math.sin(this.swingProgress * Math.PI) * 1.5) - 0.5;
+      swingAngle = (Math.sin(this.swingProgress * Math.PI) * 1.8) - 0.6;
     }
 
-    // 手と武器の描画
+    // 手と武器
     ctx.save();
-    ctx.translate(10, 8 + bob);
+    ctx.translate(6, -4);
     ctx.rotate(swingAngle);
 
-    // 手のひら
     ctx.fillStyle = '#ffcc80';
     ctx.beginPath();
-    ctx.arc(0, 0, 4, 0, Math.PI * 2);
+    ctx.arc(0, 0, 3.5, 0, Math.PI * 2);
     ctx.fill();
 
-    // 装備ツールのベクター描画
     if (held) {
       this.renderEquippedTool(ctx, held.id);
     }
@@ -466,11 +478,12 @@ export class Player {
 
     ctx.restore();
 
-    // 攻撃時の斬撃エフェクト (Slash Trail Arc)
+    // 斬撃軌跡（三人称アーク）
     if (this.isAttacking && this.swingProgress > 0.1 && this.swingProgress < 0.9) {
       ctx.save();
-      ctx.translate(sx, sy);
-      ctx.rotate(this.angle + swingAngle);
+      ctx.translate(sx, groundSy - 14);
+      ctx.scale(this.facing, 1);
+      ctx.rotate(swingAngle);
 
       const slashGrad = ctx.createLinearGradient(12, -20, 45, 20);
       slashGrad.addColorStop(0, 'rgba(255, 255, 255, 0)');
@@ -480,24 +493,21 @@ export class Player {
       ctx.strokeStyle = slashGrad;
       ctx.lineWidth = 4;
       ctx.beginPath();
-      ctx.arc(0, 0, 36, -0.6, 0.6);
+      ctx.arc(0, 0, 34, -0.7, 0.7);
       ctx.stroke();
 
       ctx.restore();
     }
   }
 
-  // 武器・ツールの高精細ベクター描画
   renderEquippedTool(ctx, id) {
     if (id === 'iron_sword' || id === 'wooden_sword') {
       const isIron = id === 'iron_sword';
-      // 柄
       ctx.fillStyle = '#4e342e';
       ctx.fillRect(0, -2, 6, 4);
-      // 鍔 (Guard)
       ctx.fillStyle = isIron ? '#ffb300' : '#8d6e63';
       ctx.fillRect(5, -6, 3, 12);
-      // 刀身 (Blade)
+
       const bladeGrad = ctx.createLinearGradient(8, -4, 28, 4);
       bladeGrad.addColorStop(0, isIron ? '#eceff1' : '#bcaaa4');
       bladeGrad.addColorStop(0.5, isIron ? '#cfd8dc' : '#8d6e63');
@@ -506,17 +516,15 @@ export class Player {
       ctx.beginPath();
       ctx.moveTo(8, -3);
       ctx.lineTo(26, -2);
-      ctx.lineTo(32, 0); // 剣先
+      ctx.lineTo(32, 0);
       ctx.lineTo(26, 2);
       ctx.lineTo(8, 3);
       ctx.closePath();
       ctx.fill();
     } else if (id.includes('axe')) {
       const isStone = id === 'stone_axe';
-      // 柄
       ctx.fillStyle = '#6d4c41';
       ctx.fillRect(0, -2, 22, 4);
-      // 斧頭 (Axe Head)
       ctx.fillStyle = isStone ? '#607d8b' : '#8d6e63';
       ctx.beginPath();
       ctx.moveTo(16, -2);
@@ -525,16 +533,13 @@ export class Player {
       ctx.lineTo(20, -2);
       ctx.closePath();
       ctx.fill();
-      // 刃先ハイライト
       ctx.strokeStyle = isStone ? '#b0bec5' : '#d7ccc8';
       ctx.lineWidth = 1.5;
       ctx.stroke();
     } else if (id.includes('pickaxe')) {
       const isStone = id === 'stone_pickaxe';
-      // 柄
       ctx.fillStyle = '#6d4c41';
       ctx.fillRect(0, -2, 22, 4);
-      // ツルハシ頭 (Pickaxe Head)
       ctx.fillStyle = isStone ? '#546e7a' : '#8d6e63';
       ctx.beginPath();
       ctx.moveTo(18, -11);
@@ -544,10 +549,8 @@ export class Player {
       ctx.closePath();
       ctx.fill();
     } else if (id === 'torch') {
-      // 松明
       ctx.fillStyle = '#4e342e';
       ctx.fillRect(0, -2, 18, 4);
-      // 炎
       ctx.fillStyle = '#ff5722';
       ctx.beginPath();
       ctx.arc(20, 0, 5, 0, Math.PI * 2);
@@ -557,7 +560,6 @@ export class Player {
       ctx.arc(20, 0, 2.5, 0, Math.PI * 2);
       ctx.fill();
     } else {
-      // その他はアイコンを小さく描画
       const def = ITEMS[id];
       if (def) {
         ctx.font = '16px serif';
