@@ -48,16 +48,14 @@ canvas#gameCanvas {
   z-index: 10;
 }
 
-/* ガラスモーフィズム HUD パネル */
+/* 高速化されたダークガラス HUD パネル */
 .hud-panel {
-  background: rgba(14, 18, 26, 0.72);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(14, 18, 26, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 12px;
   padding: 12px 16px;
   pointer-events: auto;
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5), inset 0 1px 1px 0 rgba(255, 255, 255, 0.1);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
 }
 
 /* 上部ステータスバー */
