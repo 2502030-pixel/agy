@@ -1,0 +1,17 @@
+{
+  "name": "island-survival",
+  "version": "1.0.0",
+  "description": "ブラウザで遊べる本格サバイバルクラフトゲーム",
+  "scripts": {
+    "start": "python3 -m http.server 3000"
+  },
+  "keywords": [
+    "survival",
+    "craft",
+    "game",
+    "canvas",
+    "javascript"
+  ],
+  "author": "",
+  "license": "MIT"
+}
