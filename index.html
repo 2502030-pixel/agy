@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Island Survival - サバイバルクラフト</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="game-container">
+    <!-- メインゲームキャンバス -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- UIオーバーレイ -->
+    <div id="ui-layer">
+      <!-- 上部ステータスバー -->
+      <div id="top-bar">
+        <div id="time-display" class="hud-panel">
+          <div id="day-counter">Day 1</div>
+          <div id="clock-display">08:00</div>
+          <div id="sun-moon-icon">☀️</div>
+        </div>
+
+        <div id="quest-tracker" class="hud-panel">
+          <div class="quest-title">🎯 ガイド目標</div>
+          <div id="quest-text">木を伐採して木材を4個集めよう</div>
+        </div>
+
+        <div id="minimap-container" class="hud-panel">
+          <canvas id="minimapCanvas" width="120" height="120"></canvas>
+        </div>
+      </div>
+
+      <!-- 左下プレイヤーバイタル -->
+      <div id="vitals-panel" class="hud-panel">
+        <div class="vital-row">
+          <span class="vital-icon">❤️</span>
+          <div class="vital-bar-container">
+            <div id="health-bar" class="vital-bar health" style="width: 100%;"></div>
+            <span id="health-text" class="vital-text">100 / 100</span>
+          </div>
+        </div>
+        <div class="vital-row">
+          <span class="vital-icon">🍖</span>
+          <div class="vital-bar-container">
+            <div id="hunger-bar" class="vital-bar hunger" style="width: 100%;"></div>
+            <span id="hunger-text" class="vital-text">100 / 100</span>
+          </div>
+        </div>
+        <div class="vital-row">
+          <span class="vital-icon">💧</span>
+          <div class="vital-bar-container">
+            <div id="thirst-bar" class="vital-bar thirst" style="width: 100%;"></div>
+            <span id="thirst-text" class="vital-text">100 / 100</span>
+          </div>
+        </div>
+        <div class="vital-row">
+          <span class="vital-icon">⚡</span>
+          <div class="vital-bar-container">
+            <div id="stamina-bar" class="vital-bar stamina" style="width: 100%;"></div>
+            <span id="stamina-text" class="vital-text">100 / 100</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 下部ホットバー（クイックスロット） -->
+      <div id="bottom-bar">
+        <div id="hotbar" class="hud-panel">
+          <!-- 1〜8スロット -->
+        </div>
+      </div>
+
+      <!-- 右下アクションボタン/ヘルプ -->
+      <div id="help-hint" class="hud-panel">
+        <div>[E] インベントリ / クラフト</div>
+        <div>[WASD] 移動 / [Shift] ダッシュ</div>
+        <div>[左クリック] 攻撃・採取・使用</div>
+        <div>[右クリック] 食べる・設置</div>
+      </div>
+    </div>
+
+    <!-- インベントリ＆クラフト画面モーダル -->
+    <div id="inventory-modal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>🎒 インベントリ & クラフト [E]</h2>
+          <button id="close-inventory-btn" class="close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="inv-section">
+            <h3>所持品 (<span id="inv-count">0</span>/24)</h3>
+            <div id="inventory-grid" class="item-grid"></div>
+            <div id="selected-item-info" class="item-info-box">
+              アイテムをクリックすると詳細が表示されます
+            </div>
+          </div>
+          <div class="craft-section">
+            <h3>🔨 クラフトレシピ <span id="workbench-indicator" class="badge">基本作業</span></h3>
+            <div id="crafting-categories" class="tab-bar">
+              <button class="tab-btn active" data-cat="all">すべて</button>
+              <button class="tab-btn" data-cat="tools">道具・武器</button>
+              <button class="tab-btn" data-cat="build">建築・家具</button>
+              <button class="tab-btn" data-cat="survival">サバイバル</button>
+            </div>
+            <div id="crafting-list" class="craft-grid"></div>
+            <div id="crafting-preview" class="craft-preview-box"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- チェスト用モーダル -->
+    <div id="chest-modal" class="modal hidden">
+      <div class="modal-content small-modal">
+        <div class="modal-header">
+          <h2>📦 木箱 (チェスト)</h2>
+          <button id="close-chest-btn" class="close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="chest-container">
+            <h4>チェストの中身</h4>
+            <div id="chest-grid" class="item-grid"></div>
+          </div>
+          <div class="player-inv-container">
+            <h4>あなたの所持品</h4>
+            <div id="chest-player-grid" class="item-grid"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ゲームオーバー画面 -->
+    <div id="gameover-modal" class="modal hidden">
+      <div class="modal-content gameover-box">
+        <h1 class="gameover-title">💀 GAME OVER</h1>
+        <p id="gameover-reason">力尽きてしまった...</p>
+        <p id="survival-record">生存日数: 1日</p>
+        <button id="respawn-btn" class="btn primary-btn">島でリスポーンする</button>
+      </div>
+    </div>
+
+    <!-- 通知トースト -->
+    <div id="toast-container"></div>
+  </div>
+
+  <!-- スクリプトの読み込み -->
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
