@@ -1,4 +1,4 @@
-// メインゲームループ、UI制御、ライティング、イベントハンドリング、クラフト
+// メインゲームループ、UI制御、シネマティック動的ライティング、環境ダスト、スクリーンシェイク
 
 import { World, TILE_SIZE } from './world.js';
 import { Player } from './player.js';
@@ -20,6 +20,9 @@ class Game {
       height: window.innerHeight
     };
 
+    // スクリーンシェイク
+    this.screenShake = 0;
+
     // 入力
     this.input = {
       keys: {},
@@ -39,7 +42,8 @@ class Game {
       enemies: [],
       droppedItems: [],
       particles: [],
-      popups: []
+      popups: [],
+      ambientParticles: [] // 浮遊する光の胞子・ホタル
     };
 
     // クエストシステム
@@ -55,12 +59,11 @@ class Game {
     ];
     this.currentQuestIdx = 0;
 
-    // UI要素の参照
+    // UI参照
     this.inventoryModal = document.getElementById('inventory-modal');
     this.chestModal = document.getElementById('chest-modal');
     this.gameoverModal = document.getElementById('gameover-modal');
     this.activeChest = null;
-    this.selectedCraftRecipe = null;
     this.selectedCraftCat = 'all';
 
     this.enemySpawnTimer = 0;
@@ -76,7 +79,7 @@ class Game {
     // ワールド生成
     this.world.generate();
 
-    // プレイヤーの安全な陸地スポーン位置を探索
+    // プレイヤー初期位置
     let spawnX = (this.world.width * TILE_SIZE) / 2;
     let spawnY = (this.world.height * TILE_SIZE) / 2;
     for (let r = 0; r < 30; r++) {
@@ -86,9 +89,9 @@ class Game {
           const tx = Math.floor(this.world.width / 2) + dx;
           const ty = Math.floor(this.world.height / 2) + dy;
           const tile = this.world.getTile(tx, ty);
-          if (tile === 2 || tile === 3 || tile === 4) { // 砂浜、草地、森林
-            spawnX = tx * TILE_SIZE + 20;
-            spawnY = ty * TILE_SIZE + 20;
+          if (tile === 2 || tile === 3 || tile === 4) {
+            spawnX = tx * TILE_SIZE + TILE_SIZE / 2;
+            spawnY = ty * TILE_SIZE + TILE_SIZE / 2;
             found = true;
             break;
           }
@@ -100,9 +103,21 @@ class Game {
 
     this.player = new Player(spawnX, spawnY);
 
-    // 初期動物のスポーン
-    for (let i = 0; i < 15; i++) {
+    // 初期動物
+    for (let i = 0; i < 16; i++) {
       this.spawnAnimal();
+    }
+
+    // 大気パーティクル（ホタル・空気中のダスト）
+    for (let i = 0; i < 35; i++) {
+      this.entities.ambientParticles.push({
+        x: Math.random() * (this.world.width * TILE_SIZE),
+        y: Math.random() * (this.world.height * TILE_SIZE),
+        vx: (Math.random() - 0.5) * 15,
+        vy: (Math.random() - 0.5) * 15,
+        radius: 1.5 + Math.random() * 2,
+        phase: Math.random() * Math.PI * 2
+      });
     }
 
     this.setupInputs();
@@ -122,10 +137,9 @@ class Game {
 
   setupInputs() {
     window.addEventListener('keydown', (e) => {
-      sound.init(); // 最初のキー押下でオーディオ初期化
+      sound.init();
       this.input.keys[e.code] = true;
 
-      // インベントリ切り替え [E]
       if (e.code === 'KeyE') {
         if (!this.chestModal.classList.contains('hidden')) {
           this.closeChest();
@@ -134,7 +148,6 @@ class Game {
         }
       }
 
-      // ホットバー切り替え [1]〜[8]
       if (e.code.startsWith('Digit')) {
         const num = parseInt(e.code.replace('Digit', ''));
         if (num >= 1 && num <= 8) {
@@ -143,7 +156,6 @@ class Game {
         }
       }
 
-      // 水を飲む [Space]
       if (e.code === 'Space') {
         this.input.justPressedWater = true;
       }
@@ -168,20 +180,18 @@ class Game {
       this.renderHotbarUI();
     });
 
-    // 左クリック（攻撃・採掘・使用）
     this.canvas.addEventListener('mousedown', (e) => {
       sound.init();
       if (this.player.isDead) return;
 
-      if (e.button === 0) { // 左クリック
+      if (e.button === 0) {
         this.updateMouseWorld();
-        // 建物との直接インタラクションチェック（チェスト、ドア）
         let interacted = false;
         for (const b of this.entities.buildings) {
           const dist = Math.hypot(this.input.mouseWorldX - b.x, this.input.mouseWorldY - b.y);
           const pDist = Math.hypot(this.player.x - b.x, this.player.y - b.y);
 
-          if (dist < b.radius + 15 && pDist < 90) {
+          if (dist < b.radius + 16 && pDist < 95) {
             if (b.type === 'door') {
               b.isOpen = !b.isOpen;
               sound.build();
@@ -198,15 +208,20 @@ class Game {
 
         if (!interacted) {
           this.player.performAttack(this.world, this.entities, this.entities.popups, this.entities.particles);
+          this.triggerScreenShake(3);
           this.renderHotbarUI();
         }
-      } else if (e.button === 2) { // 右クリック
+      } else if (e.button === 2) {
         e.preventDefault();
         this.handleRightClick();
       }
     });
 
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  triggerScreenShake(amount) {
+    this.screenShake = Math.max(this.screenShake, amount);
   }
 
   updateMouseWorld() {
@@ -225,20 +240,17 @@ class Game {
     if (!def) return;
 
     if (def.type === 'food' || def.type === 'medical') {
-      // 飲食・回復
       this.player.useHeldItem(this.world, this.entities, this.entities.popups);
       this.renderHotbarUI();
     } else if (def.type === 'placeable') {
-      // 建築・設置
       const placeX = this.input.mouseWorldX;
       const placeY = this.input.mouseWorldY;
       const dist = Math.hypot(placeX - this.player.x, placeY - this.player.y);
 
-      if (dist < 140 && this.world.isWalkable(placeX, placeY)) {
-        // 重なり防止
+      if (dist < 150 && this.world.isWalkable(placeX, placeY)) {
         let blocked = false;
         for (const b of this.entities.buildings) {
-          if (Math.hypot(placeX - b.x, placeY - b.y) < b.radius + 15) {
+          if (Math.hypot(placeX - b.x, placeY - b.y) < b.radius + 18) {
             blocked = true;
             break;
           }
@@ -248,6 +260,7 @@ class Game {
           this.entities.buildings.push(new Building(def.placeType, placeX, placeY));
           this.player.removeItem(this.player.selectedSlot, 1);
           sound.build();
+          this.triggerScreenShake(4);
           this.showToast(`${def.name}を設置しました`);
           this.renderHotbarUI();
         } else {
@@ -257,24 +270,22 @@ class Game {
     }
   }
 
-  // 動物のスポーン
   spawnAnimal() {
     const tx = Math.floor(Math.random() * this.world.width);
     const ty = Math.floor(Math.random() * this.world.height);
     const tile = this.world.getTile(tx, ty);
 
-    if (tile === 3 || tile === 4) { // 草原または森
-      const x = tx * TILE_SIZE + 20;
-      const y = ty * TILE_SIZE + 20;
+    if (tile === 3 || tile === 4) {
+      const x = tx * TILE_SIZE + 24;
+      const y = ty * TILE_SIZE + 24;
       const type = Math.random() < 0.6 ? 'rabbit' : 'deer';
       this.entities.animals.push(new Animal(type, x, y));
     }
   }
 
-  // 敵のスポーン（夜間）
   spawnEnemy() {
     const angle = Math.random() * Math.PI * 2;
-    const dist = 380 + Math.random() * 200;
+    const dist = 420 + Math.random() * 220;
     const x = this.player.x + Math.cos(angle) * dist;
     const y = this.player.y + Math.sin(angle) * dist;
 
@@ -292,13 +303,11 @@ class Game {
     return count;
   }
 
-  // UIイベントの設定
   setupUIEvents() {
     document.getElementById('close-inventory-btn').addEventListener('click', () => this.toggleInventory(false));
     document.getElementById('close-chest-btn').addEventListener('click', () => this.closeChest());
     document.getElementById('respawn-btn').addEventListener('click', () => this.respawn());
 
-    // クラフトカテゴリタブ
     const tabs = document.querySelectorAll('.tab-btn');
     tabs.forEach(tab => {
       tab.addEventListener('click', () => {
@@ -340,10 +349,9 @@ class Game {
     toast.className = 'toast';
     toast.textContent = message;
     container.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
+    setTimeout(() => toast.remove(), 3200);
   }
 
-  // ホットバーUIの再描画
   renderHotbarUI() {
     const hotbarEl = document.getElementById('hotbar');
     hotbarEl.innerHTML = '';
@@ -374,7 +382,6 @@ class Game {
     }
   }
 
-  // インベントリモーダルの描画
   renderInventoryModal() {
     const grid = document.getElementById('inventory-grid');
     grid.innerHTML = '';
@@ -407,22 +414,20 @@ class Game {
     document.getElementById('inv-count').textContent = totalUsed;
   }
 
-  // クラフトUIの描画
   renderCraftingUI() {
     const listEl = document.getElementById('crafting-list');
     listEl.innerHTML = '';
 
-    // 作業台・焚き火の近くにいるか判定
-    const nearWorkbench = this.entities.buildings.some(b => b.type === 'workbench' && Math.hypot(this.player.x - b.x, this.player.y - b.y) < 140);
-    const nearCampfire = this.entities.buildings.some(b => b.type === 'campfire' && Math.hypot(this.player.x - b.x, this.player.y - b.y) < 140);
+    const nearWorkbench = this.entities.buildings.some(b => b.type === 'workbench' && Math.hypot(this.player.x - b.x, this.player.y - b.y) < 150);
+    const nearCampfire = this.entities.buildings.some(b => b.type === 'campfire' && Math.hypot(this.player.x - b.x, this.player.y - b.y) < 150);
 
     const indicator = document.getElementById('workbench-indicator');
     if (nearWorkbench) {
       indicator.textContent = '作業台利用中 🔨';
-      indicator.style.background = '#388e3c';
+      indicator.style.background = '#2e7d32';
     } else {
       indicator.textContent = '基本作業 🪚';
-      indicator.style.background = '#3182ce';
+      indicator.style.background = '#1565c0';
     }
 
     const filteredRecipes = RECIPES.filter(r => {
@@ -451,8 +456,8 @@ class Game {
         <div class="craft-card-info">
           <div class="craft-card-name">${itemDef.name} ${recipe.count > 1 ? `x${recipe.count}` : ''}</div>
           <div class="craft-card-cost">必要: ${ingText}</div>
-          ${recipe.requiresWorkbench && !nearWorkbench ? '<small style="color:#e57373">※作業台が必要</small>' : ''}
-          ${recipe.requiresCampfire && !nearCampfire ? '<small style="color:#e57373">※焚き火が必要</small>' : ''}
+          ${recipe.requiresWorkbench && !nearWorkbench ? '<small style="color:#ef5350">※作業台が必要</small>' : ''}
+          ${recipe.requiresCampfire && !nearCampfire ? '<small style="color:#ef5350">※焚き火が必要</small>' : ''}
         </div>
       `;
 
@@ -474,7 +479,6 @@ class Game {
     });
   }
 
-  // チェストモーダルの描画
   renderChestModal() {
     if (!this.activeChest) return;
     const cGrid = document.getElementById('chest-grid');
@@ -482,7 +486,6 @@ class Game {
     cGrid.innerHTML = '';
     pGrid.innerHTML = '';
 
-    // チェスト側の枠
     this.activeChest.chestItems.forEach((slot, idx) => {
       const slotDiv = document.createElement('div');
       slotDiv.className = 'slot';
@@ -493,7 +496,6 @@ class Game {
           ${slot.count > 1 ? `<span class="slot-count">${slot.count}</span>` : ''}
         `;
         slotDiv.addEventListener('click', () => {
-          // チェストからプレイヤーインベントリへ
           const added = this.player.addItem(slot.id, slot.count, slot.durability);
           if (added > 0) {
             slot.count -= added;
@@ -507,7 +509,6 @@ class Game {
       cGrid.appendChild(slotDiv);
     });
 
-    // プレイヤー側の枠
     this.player.inventory.forEach((slot, idx) => {
       const slotDiv = document.createElement('div');
       slotDiv.className = 'slot';
@@ -518,7 +519,6 @@ class Game {
           ${slot.count > 1 ? `<span class="slot-count">${slot.count}</span>` : ''}
         `;
         slotDiv.addEventListener('click', () => {
-          // プレイヤーからチェストへ
           for (let c = 0; c < this.activeChest.chestItems.length; c++) {
             if (!this.activeChest.chestItems[c]) {
               this.activeChest.chestItems[c] = { ...slot };
@@ -535,7 +535,6 @@ class Game {
     });
   }
 
-  // ゲームオーバー＆リスポーン
   respawn() {
     this.player.hp = 100;
     this.player.hunger = 100;
@@ -546,7 +545,6 @@ class Game {
     this.showToast('新たな命で目覚めました！');
   }
 
-  // メインループ更新
   update(dt) {
     if (this.player.isDead) {
       if (this.gameoverModal.classList.contains('hidden')) {
@@ -557,7 +555,12 @@ class Game {
       return;
     }
 
-    // カメラ位置（プレイヤー追従）
+    // スクリーンシェイクの減衰
+    if (this.screenShake > 0) {
+      this.screenShake = Math.max(0, this.screenShake - dt * 15);
+    }
+
+    // カメラ位置
     this.camera.x = this.player.x - this.camera.width / 2;
     this.camera.y = this.player.y - this.camera.height / 2;
     this.updateMouseWorld();
@@ -568,39 +571,40 @@ class Game {
     // プレイヤー更新
     this.player.update(dt, this.input, this.world, this.entities.buildings);
 
-    // ドロップアイテムの更新と収集
+    // ドロップアイテム
     for (let i = this.entities.droppedItems.length - 1; i >= 0; i--) {
       const item = this.entities.droppedItems[i];
       item.update(dt, this.player.x, this.player.y);
 
-      if (Math.hypot(this.player.x - item.x, this.player.y - item.y) < 22 && item.pickupDelay <= 0) {
+      if (Math.hypot(this.player.x - item.x, this.player.y - item.y) < 24 && item.pickupDelay <= 0) {
         const added = this.player.addItem(item.itemId, item.count);
         if (added > 0) {
           sound.pickup();
           const def = ITEMS[item.itemId];
-          this.entities.popups.push(new PopupText(`+${item.count} ${def ? def.name : item.itemId}`, this.player.x, this.player.y - 15, '#81c784'));
+          this.entities.popups.push(new PopupText(`+${item.count} ${def ? def.name : item.itemId}`, this.player.x, this.player.y - 18, '#81c784'));
           this.entities.droppedItems.splice(i, 1);
           this.renderHotbarUI();
         }
       }
     }
 
-    // 建築物の更新
+    // 建築物
     for (let i = this.entities.buildings.length - 1; i >= 0; i--) {
       const b = this.entities.buildings[i];
       b.update(dt, this.entities.particles);
       if (b.hp <= 0) {
         sound.breakResource();
+        this.triggerScreenShake(5);
         this.entities.buildings.splice(i, 1);
       }
     }
 
-    // 動物の更新
+    // 動物
     for (const animal of this.entities.animals) {
       animal.update(dt, this.player.x, this.player.y, this.world);
     }
 
-    // 敵モンスターの更新
+    // 敵
     for (let i = this.entities.enemies.length - 1; i >= 0; i--) {
       const enemy = this.entities.enemies[i];
       enemy.update(dt, this.player, this.entities.buildings, this.world);
@@ -616,15 +620,28 @@ class Game {
       if (this.entities.popups[i].life <= 0) this.entities.popups.splice(i, 1);
     }
 
-    // スポナー（昼夜連動）
+    // 大気浮遊ダストの更新
+    for (const ap of this.entities.ambientParticles) {
+      ap.x += ap.vx * dt;
+      ap.y += ap.vy * dt;
+      ap.phase += dt * 2.5;
+
+      // 画面端ループ
+      if (ap.x < 0) ap.x = this.world.width * TILE_SIZE;
+      if (ap.x > this.world.width * TILE_SIZE) ap.x = 0;
+      if (ap.y < 0) ap.y = this.world.height * TILE_SIZE;
+      if (ap.y > this.world.height * TILE_SIZE) ap.y = 0;
+    }
+
+    // スポナー
     this.enemySpawnTimer += dt;
-    if (this.world.isNight() && this.entities.enemies.length < 8 && this.enemySpawnTimer > 6.0) {
+    if (this.world.isNight() && this.entities.enemies.length < 8 && this.enemySpawnTimer > 5.5) {
       this.spawnEnemy();
       this.enemySpawnTimer = 0;
     }
 
     this.animalSpawnTimer += dt;
-    if (!this.world.isNight() && this.entities.animals.length < 20 && this.animalSpawnTimer > 8.0) {
+    if (!this.world.isNight() && this.entities.animals.length < 20 && this.animalSpawnTimer > 7.5) {
       this.spawnAnimal();
       this.animalSpawnTimer = 0;
     }
@@ -637,11 +654,9 @@ class Game {
       this.currentQuestIdx++;
     }
 
-    // HUDの更新
     this.updateHUD();
   }
 
-  // HUDバー・表示の更新
   updateHUD() {
     document.getElementById('health-bar').style.width = `${(this.player.hp / this.player.maxHp) * 100}%`;
     document.getElementById('health-text').textContent = `${Math.ceil(this.player.hp)} / ${this.player.maxHp}`;
@@ -662,13 +677,19 @@ class Game {
     const q = this.quests[this.currentQuestIdx];
     document.getElementById('quest-text').textContent = q ? q.text : '全目標クリア！自由な開拓を楽しもう！';
 
-    // ミニマップ描画
     this.world.renderMinimap(this.minimapCanvas, this.player.x, this.player.y);
   }
 
-  // 描画処理
   render() {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+    this.ctx.save();
+    // スクリーンシェイクの適用
+    if (this.screenShake > 0) {
+      const shakeX = (Math.random() - 0.5) * this.screenShake;
+      const shakeY = (Math.random() - 0.5) * this.screenShake;
+      this.ctx.translate(shakeX, shakeY);
+    }
 
     // 1. タイルマップ
     this.world.renderTiles(this.ctx, this.camera);
@@ -704,58 +725,88 @@ class Game {
       p.render(this.ctx, this.camera);
     }
 
-    // 9. 昼夜ライティング・暗闇の描画
+    // 9. 大気中の微粒子（ホタル、浮遊ダスト）
+    const isNight = this.world.isNight();
+    for (const ap of this.entities.ambientParticles) {
+      const sx = ap.x - this.camera.x;
+      const sy = ap.y - this.camera.y;
+
+      if (sx >= 0 && sx <= this.camera.width && sy >= 0 && sy <= this.camera.height) {
+        const glow = (Math.sin(ap.phase) + 1) * 0.5;
+        this.ctx.fillStyle = isNight ? `rgba(220, 255, 100, ${glow * 0.8})` : `rgba(255, 255, 255, ${glow * 0.35})`;
+        this.ctx.beginPath();
+        this.ctx.arc(sx, sy, ap.radius, 0, Math.PI * 2);
+        this.ctx.fill();
+      }
+    }
+
+    // 10. シネマティック動的ライティング
     this.renderLighting();
 
-    // 10. ポップアップテキスト（暗闇の上に表示）
+    // 11. ポップアップテキスト
     for (const pop of this.entities.popups) {
       pop.render(this.ctx, this.camera);
     }
+
+    this.ctx.restore();
   }
 
-  // 動的ライティングシステム
+  // 映画のようなシネマティック動的ライティング（滑らかなフォールオフと暖色ブルーム）
   renderLighting() {
     const ambient = this.world.getAmbientLight();
-    if (ambient >= 0.98) return; // 昼は暗闇マスク不要
+    const sky = this.world.getSkyColor();
+
+    // 夕暮れ・朝焼け・夜のカラーグレーディングオーバーレイ
+    if (sky) {
+      this.ctx.save();
+      this.ctx.fillStyle = `rgba(${sky.r}, ${sky.g}, ${sky.b}, ${sky.a})`;
+      this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+      this.ctx.restore();
+    }
+
+    if (ambient >= 0.98) return;
 
     this.ctx.save();
 
-    // 画面全体を覆う暗闇レイヤー
+    // 暗闇バッファ
     const darkness = 1.0 - ambient;
     const darkCanvas = document.createElement('canvas');
     darkCanvas.width = this.canvas.width;
     darkCanvas.height = this.canvas.height;
     const dCtx = darkCanvas.getContext('2d');
 
-    dCtx.fillStyle = `rgba(10, 12, 22, ${Math.min(0.92, darkness * 0.95)})`;
+    // コバルトブラックの夜の闇
+    dCtx.fillStyle = `rgba(6, 10, 20, ${Math.min(0.93, darkness * 0.96)})`;
     dCtx.fillRect(0, 0, darkCanvas.width, darkCanvas.height);
 
-    // 光源をくり抜く (destination-out)
     dCtx.globalCompositeOperation = 'destination-out';
 
-    // プレイヤーの光源（松明持ちなら広く、素手でもわずかな周囲光）
+    // プレイヤーの光源
     const held = this.player.getHeldItem();
-    let pRadius = held && held.id === 'torch' ? 240 : 100;
+    let pRadius = held && held.id === 'torch' ? 260 : 110;
     const pScreenX = this.player.x - this.camera.x;
     const pScreenY = this.player.y - this.camera.y;
 
-    const pGrad = dCtx.createRadialGradient(pScreenX, pScreenY, 20, pScreenX, pScreenY, pRadius);
+    const pGrad = dCtx.createRadialGradient(pScreenX, pScreenY, 15, pScreenX, pScreenY, pRadius);
     pGrad.addColorStop(0, 'rgba(0, 0, 0, 1)');
+    pGrad.addColorStop(0.7, 'rgba(0, 0, 0, 0.7)');
     pGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
     dCtx.fillStyle = pGrad;
     dCtx.beginPath();
     dCtx.arc(pScreenX, pScreenY, pRadius, 0, Math.PI * 2);
     dCtx.fill();
 
-    // 焚き火・松明の光源
+    // 焚き火・松明の光源（ゆらめくフォールオフ）
     for (const b of this.entities.buildings) {
       if (b.type === 'campfire' || b.type === 'torch') {
-        const bRadius = b.type === 'campfire' ? 260 : 180;
+        const flicker = Math.sin(performance.now() * 0.008 + b.x) * 10;
+        const bRadius = (b.type === 'campfire' ? 280 : 190) + flicker;
         const bScreenX = b.x - this.camera.x;
         const bScreenY = b.y - this.camera.y;
 
-        const bGrad = dCtx.createRadialGradient(bScreenX, bScreenY, 15, bScreenX, bScreenY, bRadius);
+        const bGrad = dCtx.createRadialGradient(bScreenX, bScreenY, 20, bScreenX, bScreenY, bRadius);
         bGrad.addColorStop(0, 'rgba(0, 0, 0, 1)');
+        bGrad.addColorStop(0.65, 'rgba(0, 0, 0, 0.65)');
         bGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
         dCtx.fillStyle = bGrad;
         dCtx.beginPath();
@@ -764,12 +815,29 @@ class Game {
       }
     }
 
-    // 暗闇マスクをゲーム画面に合成
     this.ctx.drawImage(darkCanvas, 0, 0);
+
+    // 焚き火と松明のウォームブルーム（暖色グローの加算合成）
+    this.ctx.globalCompositeOperation = 'screen';
+    for (const b of this.entities.buildings) {
+      if (b.type === 'campfire' || b.type === 'torch') {
+        const bScreenX = b.x - this.camera.x;
+        const bScreenY = b.y - this.camera.y;
+        const glowRadius = b.type === 'campfire' ? 140 : 80;
+
+        const warmGlow = this.ctx.createRadialGradient(bScreenX, bScreenY, 5, bScreenX, bScreenY, glowRadius);
+        warmGlow.addColorStop(0, 'rgba(255, 160, 40, 0.35)');
+        warmGlow.addColorStop(1, 'rgba(255, 100, 20, 0)');
+        this.ctx.fillStyle = warmGlow;
+        this.ctx.beginPath();
+        this.ctx.arc(bScreenX, bScreenY, glowRadius, 0, Math.PI * 2);
+        this.ctx.fill();
+      }
+    }
+
     this.ctx.restore();
   }
 
-  // メインループ
   gameLoop(now) {
     const dt = Math.min((now - this.lastTime) / 1000, 0.1);
     this.lastTime = now;
@@ -781,7 +849,6 @@ class Game {
   }
 }
 
-// ゲーム起動
 window.addEventListener('load', () => {
   new Game();
 });
