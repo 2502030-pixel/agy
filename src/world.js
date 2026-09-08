@@ -1,8 +1,9 @@
-// ワールド生成、美麗な地形レンダリング、風の揺らぎ、水面コースティクス、リソースノード
+// 三人称（2.5D クォータービュー / 傾斜TPS）ワールドレンダリング
 
-export const TILE_SIZE = 48; // よりディテールを描き込めるサイズ
+export const TILE_SIZE = 52;
 export const WORLD_WIDTH = 90;
 export const WORLD_HEIGHT = 90;
+export const PITCH_RATIO = 0.72; // 斜め見下ろしのY軸傾斜圧縮（三人称パースペクティブ）
 
 export const BIOMES = {
   DEEP_WATER: 0,
@@ -19,9 +20,9 @@ export class World {
     this.height = WORLD_HEIGHT;
     this.tiles = new Uint8Array(this.width * this.height);
     this.resources = [];
-    this.timeOfDay = 8.5; // 朝8:30
+    this.timeOfDay = 8.5;
     this.dayCount = 1;
-    this.timeSpeed = 0.035; // 1日の長さ
+    this.timeSpeed = 0.035;
     this.windTime = 0;
   }
 
@@ -66,7 +67,6 @@ export class World {
       }
     }
 
-    // 淡水湖
     for (let i = 0; i < 3; i++) {
       const lakeX = Math.floor(centerX + (Math.random() - 0.5) * 30);
       const lakeY = Math.floor(centerY + (Math.random() - 0.5) * 30);
@@ -120,13 +120,13 @@ export class World {
         const wy = y * TILE_SIZE + TILE_SIZE / 2 + (Math.random() - 0.5) * 16;
 
         if (tile === BIOMES.FOREST) {
-          if (Math.random() < 0.40) {
+          if (Math.random() < 0.38) {
             this.resources.push({
               id: idCounter++,
               type: 'tree',
               x: wx,
               y: wy,
-              radius: 22,
+              radius: 24,
               maxHp: 25,
               hp: 25,
               shake: 0,
@@ -139,7 +139,7 @@ export class World {
               type: 'berry_bush',
               x: wx,
               y: wy,
-              radius: 16,
+              radius: 17,
               maxHp: 10,
               hp: 10,
               hasBerries: true,
@@ -155,7 +155,7 @@ export class World {
               type: 'tree',
               x: wx,
               y: wy,
-              radius: 22,
+              radius: 24,
               maxHp: 25,
               hp: 25,
               shake: 0,
@@ -168,7 +168,7 @@ export class World {
               type: 'rock',
               x: wx,
               y: wy,
-              radius: 18,
+              radius: 19,
               maxHp: 35,
               hp: 35,
               shake: 0,
@@ -180,7 +180,7 @@ export class World {
               type: 'berry_bush',
               x: wx,
               y: wy,
-              radius: 16,
+              radius: 17,
               maxHp: 10,
               hp: 10,
               hasBerries: true,
@@ -197,7 +197,7 @@ export class World {
               type: isIron ? 'iron_rock' : 'rock',
               x: wx,
               y: wy,
-              radius: 19,
+              radius: 20,
               maxHp: isIron ? 50 : 35,
               hp: isIron ? 50 : 35,
               shake: 0,
@@ -211,7 +211,7 @@ export class World {
               type: 'rock',
               x: wx,
               y: wy,
-              radius: 13,
+              radius: 14,
               maxHp: 20,
               hp: 20,
               shake: 0,
@@ -260,14 +260,13 @@ export class World {
     return 0.18;
   }
 
-  // カラーフィルター設定（朝焼け、夕焼け、夜の青紫）
   getSkyColor() {
     const t = this.timeOfDay;
-    if (t >= 5 && t < 7.5) { // 朝焼け（ゴールドオレンジ）
+    if (t >= 5 && t < 7.5) {
       return { r: 255, g: 190, b: 120, a: 0.15 };
-    } else if (t >= 17.5 && t < 20.5) { // 夕暮れ（ドラマチックな夕茜）
+    } else if (t >= 17.5 && t < 20.5) {
       return { r: 250, g: 110, b: 60, a: 0.22 };
-    } else if (t >= 20.5 || t < 5) { // 深夜（月光のコバルトブルー）
+    } else if (t >= 20.5 || t < 5) {
       return { r: 20, g: 30, b: 70, a: 0.35 };
     }
     return null;
@@ -283,192 +282,176 @@ export class World {
     return this.timeOfDay >= 19.5 || this.timeOfDay < 5.0;
   }
 
-  // タイルマップ描画（モダンなテクスチャと水面の波打ち）
+  // 三人称（2.5Dクォータービュー）のタイルマップ描画
   renderTiles(ctx, camera) {
-    const startCol = Math.max(0, Math.floor(camera.x / TILE_SIZE));
-    const endCol = Math.min(this.width - 1, Math.ceil((camera.x + camera.width) / TILE_SIZE));
-    const startRow = Math.max(0, Math.floor(camera.y / TILE_SIZE));
-    const endRow = Math.min(this.height - 1, Math.ceil((camera.y + camera.height) / TILE_SIZE));
+    const startCol = Math.max(0, Math.floor(camera.x / TILE_SIZE) - 2);
+    const endCol = Math.min(this.width - 1, Math.ceil((camera.x + camera.width) / TILE_SIZE) + 2);
+    const startRow = Math.max(0, Math.floor((camera.y / PITCH_RATIO) / TILE_SIZE) - 2);
+    const endRow = Math.min(this.height - 1, Math.ceil(((camera.y + camera.height) / PITCH_RATIO) / TILE_SIZE) + 4);
 
     const time = performance.now() * 0.0015;
+    const tileH = TILE_SIZE * PITCH_RATIO;
 
     for (let y = startRow; y <= endRow; y++) {
       for (let x = startCol; x <= endCol; x++) {
         const biome = this.tiles[y * this.width + x];
         const screenX = x * TILE_SIZE - camera.x;
-        const screenY = y * TILE_SIZE - camera.y;
+        const screenY = (y * TILE_SIZE) * PITCH_RATIO - camera.y;
 
-        // ベースカラー
         switch (biome) {
           case BIOMES.DEEP_WATER:
-            ctx.fillStyle = '#0f2b48';
-            ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
-            // 深海の流れ
+            ctx.fillStyle = '#0e2740';
+            ctx.fillRect(screenX, screenY, TILE_SIZE, tileH);
             ctx.fillStyle = 'rgba(20, 60, 100, 0.4)';
-            ctx.fillRect(screenX + ((Math.sin(time + y) + 1) * 8), screenY + 12, 24, 6);
+            ctx.fillRect(screenX + ((Math.sin(time + y) + 1) * 8), screenY + 8, 26, 4);
             break;
 
           case BIOMES.WATER:
-            // 浅瀬のグラデーション
-            const waterGrad = ctx.createLinearGradient(screenX, screenY, screenX, screenY + TILE_SIZE);
-            waterGrad.addColorStop(0, '#1a659e');
-            waterGrad.addColorStop(1, '#155280');
+            const waterGrad = ctx.createLinearGradient(screenX, screenY, screenX, screenY + tileH);
+            waterGrad.addColorStop(0, '#195e93');
+            waterGrad.addColorStop(1, '#134b76');
             ctx.fillStyle = waterGrad;
-            ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+            ctx.fillRect(screenX, screenY, TILE_SIZE, tileH);
 
-            // 水面コースティクス（光の屈折）
+            // 水面反射
             ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
-            const wave1 = Math.sin(time * 2 + x * 0.6 + y * 0.4) * 5;
-            const wave2 = Math.cos(time * 1.5 + x * 0.3 - y * 0.5) * 4;
-            ctx.fillRect(screenX + 8 + wave1, screenY + 10 + wave2, 16, 2.5);
-            ctx.fillRect(screenX + 22 - wave2, screenY + 28 + wave1, 14, 2);
+            const wave1 = Math.sin(time * 2 + x * 0.6 + y * 0.4) * 4;
+            ctx.fillRect(screenX + 8 + wave1, screenY + 6, 18, 2);
+            ctx.fillRect(screenX + 20 - wave1, screenY + 18, 14, 2);
             break;
 
           case BIOMES.SAND:
-            // 暖かい砂浜
             ctx.fillStyle = '#dfbe83';
-            ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+            ctx.fillRect(screenX, screenY, TILE_SIZE, tileH);
 
-            // 砂粒テクスチャ
             ctx.fillStyle = 'rgba(180, 140, 90, 0.28)';
-            ctx.fillRect(screenX + ((x * 17) % 36) + 4, screenY + ((y * 23) % 36) + 4, 3, 3);
-            ctx.fillRect(screenX + ((x * 29) % 32) + 10, screenY + ((y * 11) % 32) + 12, 2, 2);
+            ctx.fillRect(screenX + ((x * 17) % 36) + 4, screenY + ((y * 23) % 24) + 3, 3, 2);
 
-            // 近くに水がある場合の波打ち際（Foam / 白波）
+            // 白波
             if (this.isWater(x + 1, y) || this.isWater(x - 1, y) || this.isWater(x, y + 1) || this.isWater(x, y - 1)) {
-              ctx.fillStyle = `rgba(255, 255, 255, ${0.4 + Math.sin(time * 3 + x + y) * 0.25})`;
+              ctx.fillStyle = `rgba(255, 255, 255, ${0.45 + Math.sin(time * 3 + x + y) * 0.25})`;
               ctx.fillRect(screenX, screenY, TILE_SIZE, 3);
             }
             break;
 
           case BIOMES.GRASS:
-            // 鮮やかで柔らかな草原
             ctx.fillStyle = '#3c7932';
-            ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+            ctx.fillRect(screenX, screenY, TILE_SIZE, tileH);
 
-            // 草の房のハイライト
             ctx.fillStyle = '#4c993f';
-            ctx.fillRect(screenX + ((x * 19) % 32) + 6, screenY + ((y * 13) % 32) + 6, 8, 4);
+            ctx.fillRect(screenX + ((x * 19) % 32) + 6, screenY + ((y * 13) % 22) + 4, 8, 3);
             ctx.fillStyle = '#2f6027';
-            ctx.fillRect(screenX + ((x * 31) % 30) + 14, screenY + ((y * 17) % 30) + 18, 10, 3);
+            ctx.fillRect(screenX + ((x * 31) % 30) + 14, screenY + ((y * 17) % 22) + 12, 10, 2.5);
             break;
 
           case BIOMES.FOREST:
-            // 豊かな深い森の地面
             ctx.fillStyle = '#22471c';
-            ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+            ctx.fillRect(screenX, screenY, TILE_SIZE, tileH);
 
-            // 落ち葉・苔のテクスチャ
             ctx.fillStyle = '#1b3a16';
-            ctx.fillRect(screenX + 6, screenY + 8, 14, 6);
+            ctx.fillRect(screenX + 6, screenY + 6, 14, 4);
             ctx.fillStyle = '#355e2d';
-            ctx.fillRect(screenX + 24, screenY + 22, 12, 5);
+            ctx.fillRect(screenX + 24, screenY + 16, 12, 4);
             break;
 
           case BIOMES.MOUNTAIN:
-            // 岩石地帯
             ctx.fillStyle = '#566573';
-            ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+            ctx.fillRect(screenX, screenY, TILE_SIZE, tileH);
 
-            // クラックと石肌
             ctx.fillStyle = '#414b56';
-            ctx.fillRect(screenX + 4, screenY + 6, 20, 4);
+            ctx.fillRect(screenX + 4, screenY + 4, 20, 3);
             ctx.fillStyle = '#6c7d8d';
-            ctx.fillRect(screenX + 16, screenY + 20, 16, 6);
+            ctx.fillRect(screenX + 16, screenY + 14, 16, 4);
             break;
         }
 
-        // タイル境界のソフトブレンドグリッド（うっすらとした立体感）
+        // わずかなグリッドライン
         ctx.strokeStyle = 'rgba(0, 0, 0, 0.04)';
         ctx.lineWidth = 1;
-        ctx.strokeRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+        ctx.strokeRect(screenX, screenY, TILE_SIZE, tileH);
       }
     }
   }
 
-  // 美麗なモダンアートスタイルでのリソース描画
+  // 三人称立体リソース描画（垂直に立ち上がる樹木や岩石）
   renderResources(ctx, camera) {
-    // Y座標でソートして手前のものを後に描画（立体感・オクルージョン）
-    const visibleResources = this.resources.filter(res => (
-      res.x + res.radius >= camera.x - 30 &&
-      res.x - res.radius <= camera.x + camera.width + 30 &&
-      res.y + res.radius >= camera.y - 30 &&
-      res.y - res.radius <= camera.y + camera.height + 30
-    ));
+    const visibleResources = this.resources.filter(res => {
+      const sy = (res.y * PITCH_RATIO) - camera.y;
+      return (
+        res.x + res.radius >= camera.x - 40 &&
+        res.x - res.radius <= camera.x + camera.width + 40 &&
+        sy >= -60 &&
+        sy <= camera.height + 60
+      );
+    });
 
     visibleResources.sort((a, b) => a.y - b.y);
 
     for (const res of visibleResources) {
       const sx = res.x - camera.x + (res.shake > 0 ? (Math.random() - 0.5) * res.shake : 0);
-      const sy = res.y - camera.y;
+      const sy = (res.y * PITCH_RATIO) - camera.y;
 
-      // 共通のリアルなソフトドロップシャドウ
+      // 接地ドロップシャドウ（斜め見下ろしに合わせて扁平に）
       ctx.save();
-      ctx.fillStyle = 'rgba(8, 12, 18, 0.32)';
+      ctx.fillStyle = 'rgba(8, 12, 18, 0.35)';
       ctx.beginPath();
-      ctx.ellipse(sx, sy + res.radius * 0.7, res.radius * 1.1, res.radius * 0.45, 0, 0, Math.PI * 2);
+      ctx.ellipse(sx, sy + 4, res.radius * 1.1, res.radius * 0.38, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
 
       if (res.type === 'tree') {
-        // 風による揺れ
         const wind = Math.sin(this.windTime + res.swayOffset) * 4;
 
-        // 幹（立体的な円柱グラデーション）
+        // 幹（上に向かって垂直に立ち上がる立体表現）
         const trunkGrad = ctx.createLinearGradient(sx - 7, sy, sx + 7, sy);
         trunkGrad.addColorStop(0, '#3e2723');
         trunkGrad.addColorStop(0.4, '#5d4037');
         trunkGrad.addColorStop(1, '#2e1c18');
         ctx.fillStyle = trunkGrad;
         ctx.beginPath();
-        ctx.roundRect(sx - 6, sy - 8, 12, 22, [0, 0, 4, 4]);
+        ctx.roundRect(sx - 7, sy - 28, 14, 32, [2, 2, 4, 4]);
         ctx.fill();
 
-        // 幹の根張り
+        // 根
         ctx.fillStyle = '#3e2723';
         ctx.beginPath();
-        ctx.moveTo(sx - 10, sy + 14);
-        ctx.lineTo(sx - 4, sy + 4);
-        ctx.lineTo(sx + 4, sy + 4);
-        ctx.lineTo(sx + 10, sy + 14);
+        ctx.moveTo(sx - 12, sy + 4);
+        ctx.lineTo(sx - 5, sy - 8);
+        ctx.lineTo(sx + 5, sy - 8);
+        ctx.lineTo(sx + 12, sy + 4);
         ctx.closePath();
         ctx.fill();
 
-        // 複層キャノピー（ボリューム感のある樹冠）
-        // 下層（濃い影色）
+        // 立体キャノピー（立ち木の上部に大きく広がる）
         ctx.fillStyle = '#1b5e20';
         ctx.beginPath();
-        ctx.arc(sx + wind * 0.5, sy - 18, 22, 0, Math.PI * 2);
+        ctx.arc(sx + wind * 0.5, sy - 40, 26, 0, Math.PI * 2);
         ctx.fill();
 
-        // 中層（メイングリーン）
         const foliageGrad = ctx.createRadialGradient(
-          sx + wind * 0.8 - 6, sy - 26, 3,
-          sx + wind * 0.8, sy - 24, 20
+          sx + wind * 0.8 - 6, sy - 48, 4,
+          sx + wind * 0.8, sy - 46, 24
         );
         foliageGrad.addColorStop(0, '#4caf50');
         foliageGrad.addColorStop(0.7, '#2e7d32');
         foliageGrad.addColorStop(1, '#1b5e20');
         ctx.fillStyle = foliageGrad;
         ctx.beginPath();
-        ctx.arc(sx + wind * 0.8, sy - 24, 20, 0, Math.PI * 2);
+        ctx.arc(sx + wind * 0.8, sy - 46, 24, 0, Math.PI * 2);
         ctx.fill();
 
-        // ハイライトの葉クラスタ
         ctx.fillStyle = '#81c784';
         ctx.beginPath();
-        ctx.arc(sx + wind * 1.0 - 5, sy - 30, 8, 0, Math.PI * 2);
-        ctx.arc(sx + wind * 1.0 + 4, sy - 26, 6, 0, Math.PI * 2);
+        ctx.arc(sx + wind * 1.0 - 6, sy - 52, 9, 0, Math.PI * 2);
+        ctx.arc(sx + wind * 1.0 + 5, sy - 48, 8, 0, Math.PI * 2);
         ctx.fill();
 
       } else if (res.type === 'rock' || res.type === 'iron_rock') {
         const isIron = res.type === 'iron_rock';
 
-        // 多角形風のファセット（切削面）を持つ岩石
         ctx.save();
-        ctx.translate(sx, sy);
+        ctx.translate(sx, sy - 6); // 少し持ち上げて立体的に
 
-        // 岩の本体ベース
         const rockGrad = ctx.createLinearGradient(-res.radius, -res.radius, res.radius, res.radius);
         if (isIron) {
           rockGrad.addColorStop(0, '#606270');
@@ -482,45 +465,42 @@ export class World {
 
         ctx.fillStyle = rockGrad;
         ctx.beginPath();
-        ctx.moveTo(-res.radius * 0.8, res.radius * 0.5);
-        ctx.lineTo(-res.radius, -res.radius * 0.3);
-        ctx.lineTo(-res.radius * 0.4, -res.radius);
+        ctx.moveTo(-res.radius * 0.85, res.radius * 0.3);
+        ctx.lineTo(-res.radius, -res.radius * 0.4);
+        ctx.lineTo(-res.radius * 0.4, -res.radius * 0.9);
         ctx.lineTo(res.radius * 0.6, -res.radius * 0.8);
-        ctx.lineTo(res.radius, -res.radius * 0.1);
-        ctx.lineTo(res.radius * 0.7, res.radius * 0.6);
-        ctx.lineTo(0, res.radius * 0.8);
+        ctx.lineTo(res.radius, -res.radius * 0.2);
+        ctx.lineTo(res.radius * 0.75, res.radius * 0.5);
+        ctx.lineTo(0, res.radius * 0.6);
         ctx.closePath();
         ctx.fill();
 
-        // 明暗のエッジライン
-        ctx.strokeStyle = isIron ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.3)';
+        ctx.strokeStyle = isIron ? 'rgba(255, 255, 255, 0.22)' : 'rgba(255, 255, 255, 0.32)';
         ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.moveTo(-res.radius * 0.4, -res.radius);
-        ctx.lineTo(0, 0);
+        ctx.moveTo(-res.radius * 0.4, -res.radius * 0.9);
+        ctx.lineTo(0, -2);
         ctx.lineTo(res.radius * 0.6, -res.radius * 0.8);
         ctx.stroke();
 
-        // 鉄鉱石の場合：光り輝くメタリック鉱脈とスペキュラ反射
         if (isIron) {
           const sparkle = Math.sin(performance.now() * 0.005 + res.seed * 10) > 0.3;
           ctx.fillStyle = '#ffb300';
           ctx.beginPath();
-          ctx.arc(-4, -5, 4, 0, Math.PI * 2);
-          ctx.arc(5, 2, 4.5, 0, Math.PI * 2);
-          ctx.arc(-2, 6, 3, 0, Math.PI * 2);
+          ctx.arc(-4, -6, 4, 0, Math.PI * 2);
+          ctx.arc(5, 0, 4.5, 0, Math.PI * 2);
           ctx.fill();
 
           ctx.fillStyle = '#fff9c4';
           ctx.beginPath();
-          ctx.arc(-5, -6, 1.8, 0, Math.PI * 2);
-          ctx.arc(4, 1, 2, 0, Math.PI * 2);
+          ctx.arc(-5, -7, 1.8, 0, Math.PI * 2);
+          ctx.arc(4, -1, 2, 0, Math.PI * 2);
           ctx.fill();
 
           if (sparkle) {
             ctx.fillStyle = '#ffffff';
             ctx.beginPath();
-            ctx.arc(4, 1, 3, 0, Math.PI * 2);
+            ctx.arc(4, -1, 3, 0, Math.PI * 2);
             ctx.fill();
           }
         }
@@ -529,42 +509,38 @@ export class World {
       } else if (res.type === 'berry_bush') {
         const wind = Math.sin(this.windTime + res.swayOffset) * 2;
 
-        // 茂みの葉の重なり
         ctx.fillStyle = '#1b5e20';
         ctx.beginPath();
-        ctx.arc(sx + wind, sy, res.radius, 0, Math.PI * 2);
+        ctx.arc(sx + wind, sy - 8, res.radius, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.fillStyle = '#33691e';
         ctx.beginPath();
-        ctx.arc(sx + wind - 3, sy - 3, res.radius * 0.8, 0, Math.PI * 2);
+        ctx.arc(sx + wind - 3, sy - 11, res.radius * 0.8, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.fillStyle = '#558b2f';
         ctx.beginPath();
-        ctx.arc(sx + wind + 2, sy - 5, res.radius * 0.5, 0, Math.PI * 2);
+        ctx.arc(sx + wind + 2, sy - 13, res.radius * 0.5, 0, Math.PI * 2);
         ctx.fill();
 
-        // ジューシーなベリーの描画（ハイライト付き）
         if (res.hasBerries) {
           const berries = [
-            { x: -6, y: -4 },
-            { x: 5, y: -3 },
-            { x: -3, y: 5 },
-            { x: 6, y: 4 },
-            { x: 0, y: -8 }
+            { x: -6, y: -12 },
+            { x: 5, y: -11 },
+            { x: -3, y: -4 },
+            { x: 6, y: -5 },
+            { x: 0, y: -16 }
           ];
           for (const b of berries) {
             const bx = sx + wind + b.x;
             const by = sy + b.y;
 
-            // 実の本体
             ctx.fillStyle = '#c2185b';
             ctx.beginPath();
-            ctx.arc(bx, by, 3.8, 0, Math.PI * 2);
+            ctx.arc(bx, by, 4, 0, Math.PI * 2);
             ctx.fill();
 
-            // 実のツヤ（ハイライト）
             ctx.fillStyle = '#f48fb1';
             ctx.beginPath();
             ctx.arc(bx - 1.2, by - 1.2, 1.3, 0, Math.PI * 2);
@@ -573,12 +549,11 @@ export class World {
         }
       }
 
-      // 被ダメージ時の洗練されたモダンHPバー
       if (res.hp < res.maxHp) {
         const barW = 32;
         const barH = 5;
         const pct = Math.max(0, res.hp / res.maxHp);
-        const by = sy - res.radius - 12;
+        const by = sy - (res.type === 'tree' ? 70 : 26);
 
         ctx.fillStyle = 'rgba(10, 14, 20, 0.85)';
         ctx.beginPath();
@@ -613,8 +588,8 @@ export class World {
 
         let r, g, b;
         switch (biome) {
-          case BIOMES.DEEP_WATER: r = 15; g = 43; b = 72; break;
-          case BIOMES.WATER: r = 26; g = 101; b = 158; break;
+          case BIOMES.DEEP_WATER: r = 14; g = 39; b = 64; break;
+          case BIOMES.WATER: r = 25; g = 94; b = 147; break;
           case BIOMES.SAND: r = 223; g = 190; b = 131; break;
           case BIOMES.GRASS: r = 60; g = 121; b = 50; break;
           case BIOMES.FOREST: r = 34; g = 71; b = 28; break;
@@ -634,7 +609,6 @@ export class World {
     const pMinimapX = (playerX / (this.width * TILE_SIZE)) * canvas.width;
     const pMinimapY = (playerY / (this.height * TILE_SIZE)) * canvas.height;
 
-    // プレイヤーのパルスリング表示
     const pulse = (performance.now() * 0.004) % 1;
     ctx.strokeStyle = `rgba(255, 50, 50, ${1 - pulse})`;
     ctx.lineWidth = 1.5;
