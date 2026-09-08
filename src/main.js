@@ -1,43 +1,43 @@
-// 超高速化されたメインゲームループ、最適化ライティングバッファ、HUDスロットリング、三人称カメラ
-
-import { World, TILE_SIZE, PITCH_RATIO } from './world.js';
+// 二人称（Second-Person）3D サバイバルクラフト メインゲームエンジン
+import { World, TILE_SIZE } from './world.js';
 import { Player } from './player.js';
 import { Building, Animal, Enemy, DroppedItem, Particle, PopupText } from './entities.js';
 import { ITEMS, RECIPES } from './items.js';
 import { sound } from './audio.js';
+import { Renderer3D, WORLD_SCALE } from './renderer3d.js';
+import * as THREE from './vendor/three.module.js';
 
 class Game {
   constructor() {
     this.canvas = document.getElementById('gameCanvas');
-    this.ctx = this.canvas.getContext('2d');
+    if (this.canvas) this.canvas.style.display = 'none'; // 3D WebGLキャンバスを主画面に
+
     this.minimapCanvas = document.getElementById('minimapCanvas');
 
-    // 三人称カメラ
-    this.camera = {
-      x: 0,
-      y: 0,
-      width: window.innerWidth,
-      height: window.innerHeight
-    };
+    // 3D レンダリングエンジン初期化
+    this.renderer3d = new Renderer3D(document.getElementById('game-container'));
 
     this.screenShake = 0;
 
     // 入力
     this.input = {
       keys: {},
-      mouseX: 0,
-      mouseY: 0,
+      mouseX: window.innerWidth / 2,
+      mouseY: window.innerHeight / 2,
       mouseWorldX: 0,
       mouseWorldY: 0,
       mouseWorldAngle: 0,
+      moveDx: 0,
+      moveDy: 0,
       justPressedWater: false
     };
 
-    // 暗闇レンダリング用の再利用オフスクリーンキャンバス（毎フレーム生成を完全撤廃）
-    this.darkCanvas = document.createElement('canvas');
-    this.darkCtx = this.darkCanvas.getContext('2d');
+    // マウス視点操作
+    this.isRightDragging = false;
+    this.lastMouseX = 0;
+    this.lastMouseY = 0;
 
-    // エンティティ
+    // ワールドとエンティティ
     this.world = new World();
     this.entities = {
       buildings: [],
@@ -79,6 +79,11 @@ class Game {
     this.sunMoonIcon = document.getElementById('sun-moon-icon');
     this.questText = document.getElementById('quest-text');
 
+    // 二人称HUD参照
+    this.cameraTargetLabel = document.getElementById('camera-target-label');
+    this.switchCameraBtn = document.getElementById('switch-camera-btn');
+    this.visionJackOverlay = document.getElementById('vision-jack-overlay');
+
     this.activeChest = null;
     this.selectedCraftCat = 'all';
 
@@ -90,16 +95,16 @@ class Game {
   }
 
   init() {
-    this.resize();
-    window.addEventListener('resize', () => this.resize());
-
     // ワールド生成
     this.world.generate();
 
-    // プレイヤー初期位置
+    // 島の 3D メッシュ構築
+    this.renderer3d.buildIsland(this.world);
+
+    // プレイヤー初期スポーン位置（平原または森林の陸地）
     let spawnX = (this.world.width * TILE_SIZE) / 2;
     let spawnY = (this.world.height * TILE_SIZE) / 2;
-    for (let r = 0; r < 30; r++) {
+    for (let r = 0; r < 35; r++) {
       let found = false;
       for (let dy = -r; dy <= r; dy++) {
         for (let dx = -r; dx <= r; dx++) {
@@ -120,19 +125,9 @@ class Game {
 
     this.player = new Player(spawnX, spawnY);
 
-    for (let i = 0; i < 15; i++) {
+    // 野生動物のスポーン
+    for (let i = 0; i < 16; i++) {
       this.spawnAnimal();
-    }
-
-    for (let i = 0; i < 28; i++) {
-      this.entities.ambientParticles.push({
-        x: Math.random() * (this.world.width * TILE_SIZE),
-        y: Math.random() * (this.world.height * TILE_SIZE),
-        vx: (Math.random() - 0.5) * 15,
-        vy: (Math.random() - 0.5) * 15,
-        radius: 1.5 + Math.random() * 2,
-        phase: Math.random() * Math.PI * 2
-      });
     }
 
     this.setupInputs();
@@ -143,22 +138,17 @@ class Game {
     requestAnimationFrame((t) => this.gameLoop(t));
   }
 
-  // キャンバスリサイズ時に暗闇バッファも同期
-  resize() {
-    this.canvas.width = window.innerWidth;
-    this.canvas.height = window.innerHeight;
-    this.camera.width = this.canvas.width;
-    this.camera.height = this.canvas.height;
-
-    this.darkCanvas.width = this.canvas.width;
-    this.darkCanvas.height = this.canvas.height;
-  }
-
   setupInputs() {
     window.addEventListener('keydown', (e) => {
       sound.init();
       this.input.keys[e.code] = true;
 
+      // 二人称視界ジャック切替 [V]
+      if (e.code === 'KeyV') {
+        this.toggleVisionJack();
+      }
+
+      // インベントリ開閉 [E]
       if (e.code === 'KeyE') {
         if (!this.chestModal.classList.contains('hidden')) {
           this.closeChest();
@@ -167,6 +157,7 @@ class Game {
         }
       }
 
+      // ホットバースロット [1〜8]
       if (e.code.startsWith('Digit')) {
         const num = parseInt(e.code.replace('Digit', ''));
         if (num >= 1 && num <= 8) {
@@ -175,6 +166,7 @@ class Game {
         }
       }
 
+      // 水分補給 [Space]
       if (e.code === 'Space') {
         this.input.justPressedWater = true;
       }
@@ -187,73 +179,160 @@ class Game {
     window.addEventListener('mousemove', (e) => {
       this.input.mouseX = e.clientX;
       this.input.mouseY = e.clientY;
-      this.updateMouseWorld();
+
+      if (this.isRightDragging) {
+        // 右ドラッグで観察者のカメラ視点を旋回
+        const dx = e.clientX - this.lastMouseX;
+        const dy = e.clientY - this.lastMouseY;
+        this.renderer3d.spiritAngle -= dx * 0.007;
+        this.renderer3d.spiritPitch = Math.max(0.12, Math.min(1.25, this.renderer3d.spiritPitch + dy * 0.005));
+        this.lastMouseX = e.clientX;
+        this.lastMouseY = e.clientY;
+      }
+
+      // 3D レイキャスター更新
+      this.renderer3d.updateRaycast(e.clientX, e.clientY);
+
+      if (this.renderer3d.hasGroundIntersection) {
+        // 3D地上座標から2Dゲーム座標へ変換
+        this.input.mouseWorldX = this.renderer3d.groundIntersection.x / WORLD_SCALE;
+        this.input.mouseWorldY = this.renderer3d.groundIntersection.z / WORLD_SCALE;
+        this.input.mouseWorldAngle = Math.atan2(
+          this.input.mouseWorldY - this.player.y,
+          this.input.mouseWorldX - this.player.x
+        );
+      }
     });
 
     window.addEventListener('wheel', (e) => {
-      if (e.deltaY > 0) {
-        this.player.selectedSlot = (this.player.selectedSlot + 1) % 8;
+      if (e.shiftKey || e.ctrlKey) {
+        // 観察者カメラ距離ズーム
+        this.renderer3d.targetDistance = Math.max(8.0, Math.min(26.0, this.renderer3d.targetDistance + (e.deltaY > 0 ? 2.5 : -2.5)));
       } else {
-        this.player.selectedSlot = (this.player.selectedSlot + 7) % 8;
+        // ホットバースロット切り替え
+        if (e.deltaY > 0) {
+          this.player.selectedSlot = (this.player.selectedSlot + 1) % 8;
+        } else {
+          this.player.selectedSlot = (this.player.selectedSlot + 7) % 8;
+        }
+        this.renderHotbarUI();
       }
-      this.renderHotbarUI();
     });
 
-    this.canvas.addEventListener('mousedown', (e) => {
+    const domTarget = this.renderer3d.renderer.domElement;
+
+    domTarget.addEventListener('mousedown', (e) => {
       sound.init();
       if (this.player.isDead) return;
 
       if (e.button === 0) {
-        this.updateMouseWorld();
-        let interacted = false;
-        for (let i = 0; i < this.entities.buildings.length; i++) {
-          const b = this.entities.buildings[i];
-          const dist = Math.hypot(this.input.mouseWorldX - b.x, this.input.mouseWorldY - b.y);
-          const pDist = Math.hypot(this.player.x - b.x, this.player.y - b.y);
-
-          if (dist < b.radius + 18 && pDist < 95) {
-            if (b.type === 'door') {
-              b.isOpen = !b.isOpen;
-              sound.build();
-              this.showToast(b.isOpen ? 'ドアを開けました' : 'ドアを閉めました');
-              interacted = true;
-              break;
-            } else if (b.type === 'chest') {
-              this.openChest(b);
-              interacted = true;
-              break;
-            }
-          }
-        }
-
-        if (!interacted) {
-          this.player.performAttack(this.world, this.entities, this.entities.popups, this.entities.particles);
-          this.triggerScreenShake(3);
-          this.renderHotbarUI();
-        }
+        // 左クリック：採掘・伐採・攻撃・操作
+        this.handleLeftClick();
       } else if (e.button === 2) {
-        e.preventDefault();
-        this.handleRightClick();
+        // 右クリック：カメラドラッグ開始またはアイテム設置/使用
+        this.isRightDragging = true;
+        this.lastMouseX = e.clientX;
+        this.lastMouseY = e.clientY;
+        this.rightClickDownTime = performance.now();
       }
     });
 
-    this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    domTarget.addEventListener('mouseup', (e) => {
+      if (e.button === 2) {
+        const pressDuration = performance.now() - (this.rightClickDownTime || 0);
+        this.isRightDragging = false;
+
+        // 短い右クリックの場合はアイテム設置・使用アクション
+        if (pressDuration < 280) {
+          this.handleRightClickAction();
+        }
+      }
+    });
+
+    domTarget.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
-  triggerScreenShake(amount) {
-    this.screenShake = Math.max(this.screenShake, amount);
+  // 二人称（Second-Person）視界ジャック切り替え
+  toggleVisionJack() {
+    const res = this.renderer3d.toggleCameraMode(this.entities.enemies, this.entities.animals, this.player);
+    if (this.cameraTargetLabel) {
+      this.cameraTargetLabel.textContent = res.name;
+    }
+
+    // 視界エフェクトの更新
+    if (this.visionJackOverlay) {
+      this.visionJackOverlay.className = '';
+      if (res.mode === 'creature') {
+        const entType = this.renderer3d.cameraTargetEntity ? this.renderer3d.cameraTargetEntity.type : '';
+        if (entType === 'wolf') {
+          this.visionJackOverlay.classList.add('wolf-vision');
+        } else if (entType === 'zombie') {
+          this.visionJackOverlay.classList.add('zombie-vision');
+        } else {
+          this.visionJackOverlay.classList.add('prey-vision');
+        }
+      } else {
+        this.visionJackOverlay.classList.add('spirit-vision');
+      }
+    }
+
+    this.showToast(`👁️ 二人称リンク: ${res.name} の視界`);
   }
 
-  updateMouseWorld() {
-    this.input.mouseWorldX = this.input.mouseX + this.camera.x;
-    this.input.mouseWorldY = (this.input.mouseY + this.camera.y) / PITCH_RATIO;
-    this.input.mouseWorldAngle = Math.atan2(
-      this.input.mouseWorldY - this.player.y,
-      this.input.mouseWorldX - this.player.x
-    );
+  // 左クリックによるインタラクション・攻撃
+  handleLeftClick() {
+    let interacted = false;
+
+    // 3Dレイキャストでホバーされているオブジェクトがあれば優先インタラクト
+    const hovered = this.renderer3d.hoveredObject;
+    if (hovered && hovered.userData && hovered.userData.entity) {
+      const ent = hovered.userData.entity;
+      const pDist = Math.hypot(this.player.x - ent.x, this.player.y - ent.y);
+
+      if (ent.type === 'door' && pDist < 120) {
+        ent.isOpen = !ent.isOpen;
+        sound.build();
+        this.showToast(ent.isOpen ? 'ドアを開けました' : 'ドアを閉めました');
+        interacted = true;
+      } else if (ent.type === 'chest' && pDist < 120) {
+        this.openChest(ent);
+        interacted = true;
+      }
+    }
+
+    if (!interacted) {
+      // ドアやチェストの近接探索フォールバック
+      for (let i = 0; i < this.entities.buildings.length; i++) {
+        const b = this.entities.buildings[i];
+        const dist = Math.hypot(this.input.mouseWorldX - b.x, this.input.mouseWorldY - b.y);
+        const pDist = Math.hypot(this.player.x - b.x, this.player.y - b.y);
+
+        if (dist < b.radius + 28 && pDist < 110) {
+          if (b.type === 'door') {
+            b.isOpen = !b.isOpen;
+            sound.build();
+            this.showToast(b.isOpen ? 'ドアを開けました' : 'ドアを閉めました');
+            interacted = true;
+            break;
+          } else if (b.type === 'chest') {
+            this.openChest(b);
+            interacted = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!interacted) {
+      // プレイヤーの攻撃・伐採・採掘アクション実行
+      this.player.performAttack(this.world, this.entities, this.entities.popups, this.entities.particles);
+      this.triggerScreenShake(3);
+      this.renderHotbarUI();
+    }
   }
 
-  handleRightClick() {
+  // 右クリックによるアイテム使用または3D設置
+  handleRightClickAction() {
     const held = this.player.getHeldItem();
     if (!held) return;
     const def = ITEMS[held.id];
@@ -267,7 +346,7 @@ class Game {
       const placeY = this.input.mouseWorldY;
       const dist = Math.hypot(placeX - this.player.x, placeY - this.player.y);
 
-      if (dist < 150 && this.world.isWalkable(placeX, placeY)) {
+      if (dist < 180 && this.world.isWalkable(placeX, placeY)) {
         let blocked = false;
         for (let i = 0; i < this.entities.buildings.length; i++) {
           const b = this.entities.buildings[i];
@@ -282,13 +361,17 @@ class Game {
           this.player.removeItem(this.player.selectedSlot, 1);
           sound.build();
           this.triggerScreenShake(4);
-          this.showToast(`${def.name}を設置しました`);
+          this.showToast(`🔨 ${def.name} を設置しました`);
           this.renderHotbarUI();
         } else {
           this.showToast('ここには設置できません');
         }
       }
     }
+  }
+
+  triggerScreenShake(amount) {
+    this.screenShake = Math.max(this.screenShake, amount);
   }
 
   spawnAnimal() {
@@ -330,6 +413,10 @@ class Game {
     document.getElementById('close-chest-btn').addEventListener('click', () => this.closeChest());
     document.getElementById('respawn-btn').addEventListener('click', () => this.respawn());
 
+    if (this.switchCameraBtn) {
+      this.switchCameraBtn.addEventListener('click', () => this.toggleVisionJack());
+    }
+
     const tabs = document.querySelectorAll('.tab-btn');
     tabs.forEach(tab => {
       tab.addEventListener('click', () => {
@@ -356,11 +443,15 @@ class Game {
 
   openChest(building) {
     this.activeChest = building;
+    building._isOpenedModal = true;
     this.chestModal.classList.remove('hidden');
     this.renderChestModal();
   }
 
   closeChest() {
+    if (this.activeChest) {
+      this.activeChest._isOpenedModal = false;
+    }
     this.activeChest = null;
     this.chestModal.classList.add('hidden');
   }
@@ -381,17 +472,36 @@ class Game {
     for (let i = 0; i < 8; i++) {
       const slot = this.player.inventory[i];
       const slotDiv = document.createElement('div');
-      slotDiv.className = `slot ${this.player.selectedSlot === i ? 'active' : ''}`;
-      slotDiv.innerHTML = `<span class="slot-key">${i + 1}</span>`;
+      slotDiv.className = `slot ${i === this.player.selectedSlot ? 'active' : ''}`;
+      slotDiv.dataset.index = i;
+
+      const numBadge = document.createElement('span');
+      numBadge.className = 'slot-num';
+      numBadge.textContent = `${i + 1}`;
+      slotDiv.appendChild(numBadge);
 
       if (slot) {
         const itemDef = ITEMS[slot.id];
-        if (itemDef) {
-          slotDiv.innerHTML += `
-            <div class="slot-icon">${itemDef.icon}</div>
-            ${slot.count > 1 ? `<span class="slot-count">${slot.count}</span>` : ''}
-            ${slot.durability !== null ? `<div class="slot-durability" style="width: ${(slot.durability / (itemDef.maxDurability || 1)) * 100}%"></div>` : ''}
-          `;
+        const iconDiv = document.createElement('div');
+        iconDiv.className = 'slot-icon';
+        iconDiv.textContent = itemDef.icon;
+        slotDiv.appendChild(iconDiv);
+
+        if (slot.count > 1) {
+          const countSpan = document.createElement('span');
+          countSpan.className = 'slot-count';
+          countSpan.textContent = `${slot.count}`;
+          slotDiv.appendChild(countSpan);
+        }
+
+        if (slot.durability !== null && itemDef.maxDurability) {
+          const durBar = document.createElement('div');
+          durBar.className = 'durability-bar';
+          const durInner = document.createElement('div');
+          durInner.className = 'durability-fill';
+          durInner.style.width = `${(slot.durability / itemDef.maxDurability) * 100}%`;
+          durBar.appendChild(durInner);
+          slotDiv.appendChild(durBar);
         }
       }
 
@@ -407,94 +517,122 @@ class Game {
   renderInventoryModal() {
     const grid = document.getElementById('inventory-grid');
     grid.innerHTML = '';
+    let count = 0;
 
-    let totalUsed = 0;
     this.player.inventory.forEach((slot, idx) => {
+      if (slot) count++;
       const slotDiv = document.createElement('div');
       slotDiv.className = 'slot';
+      slotDiv.dataset.index = idx;
 
       if (slot) {
-        totalUsed++;
         const itemDef = ITEMS[slot.id];
         slotDiv.innerHTML = `
-          <div class="slot-icon">${itemDef ? itemDef.icon : ''}</div>
+          <div class="slot-icon">${itemDef.icon}</div>
           ${slot.count > 1 ? `<span class="slot-count">${slot.count}</span>` : ''}
         `;
-
         slotDiv.addEventListener('click', () => {
-          document.getElementById('selected-item-info').innerHTML = `
-            <strong>${itemDef.icon} ${itemDef.name}</strong><br>
-            <span style="color:#aaa;">${itemDef.description}</span><br>
-            <small>所持数: ${slot.count}個</small>
-          `;
+          this.showItemInfo(itemDef, slot);
         });
       }
-
       grid.appendChild(slotDiv);
     });
 
-    document.getElementById('inv-count').textContent = totalUsed;
+    document.getElementById('inv-count').textContent = `${count}`;
+  }
+
+  showItemInfo(itemDef, slot) {
+    const infoBox = document.getElementById('selected-item-info');
+    infoBox.innerHTML = `
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+        <span style="font-size:24px;">${itemDef.icon}</span>
+        <strong>${itemDef.name}</strong>
+      </div>
+      <p style="margin:0 0 6px 0; color:#cbd5e1;">${itemDef.desc}</p>
+      <div style="font-size:11.5px; color:#94a3b8;">
+        スタック上限: ${itemDef.maxStack} | 個数: ${slot ? slot.count : 1}
+      </div>
+    `;
   }
 
   renderCraftingUI() {
     const listEl = document.getElementById('crafting-list');
     listEl.innerHTML = '';
 
-    const nearWorkbench = this.entities.buildings.some(b => b.type === 'workbench' && Math.hypot(this.player.x - b.x, this.player.y - b.y) < 150);
-    const nearCampfire = this.entities.buildings.some(b => b.type === 'campfire' && Math.hypot(this.player.x - b.x, this.player.y - b.y) < 150);
+    const isNearWorkbench = this.entities.buildings.some(b => b.type === 'workbench' && Math.hypot(this.player.x - b.x, this.player.y - b.y) < 130);
+    const isNearCampfire = this.entities.buildings.some(b => b.type === 'campfire' && Math.hypot(this.player.x - b.x, this.player.y - b.y) < 130);
 
     const indicator = document.getElementById('workbench-indicator');
-    if (nearWorkbench) {
-      indicator.textContent = '作業台利用中 🔨';
-      indicator.style.background = '#2e7d32';
+    if (isNearWorkbench) {
+      indicator.textContent = '作業台あり';
+      indicator.style.background = '#059669';
     } else {
-      indicator.textContent = '基本作業 🪚';
-      indicator.style.background = '#1565c0';
+      indicator.textContent = '基本作業';
+      indicator.style.background = '#2563eb';
     }
 
-    const filteredRecipes = RECIPES.filter(r => {
+    const recipes = RECIPES.filter(r => {
       if (this.selectedCraftCat !== 'all' && r.category !== this.selectedCraftCat) return false;
       return true;
     });
 
-    filteredRecipes.forEach(recipe => {
-      const itemDef = ITEMS[recipe.result];
-      if (!itemDef) return;
-
-      const canCraftStation = (!recipe.requiresWorkbench || nearWorkbench) && (!recipe.requiresCampfire || nearCampfire);
-      const hasMats = this.player.hasIngredients(recipe.ingredients);
-      const isAvailable = canCraftStation && hasMats;
+    recipes.forEach(r => {
+      const targetItem = ITEMS[r.result.id];
+      const canMakeRequirement = (!r.needWorkbench || isNearWorkbench) && (!r.needCampfire || isNearCampfire);
+      const hasMats = this.player.hasIngredients(r.ingredients);
+      const canCraft = canMakeRequirement && hasMats;
 
       const card = document.createElement('div');
-      card.className = `craft-item-card ${isAvailable ? '' : 'disabled'}`;
+      card.className = `craft-card ${canCraft ? 'can-craft' : 'cannot-craft'}`;
 
-      const ingText = recipe.ingredients.map(ing => {
-        const d = ITEMS[ing.id];
-        return `${d ? d.name : ing.id}x${ing.count}`;
+      let ingHtml = r.ingredients.map(ing => {
+        const item = ITEMS[ing.id];
+        const has = this.countPlayerItem(ing.id);
+        const ok = has >= ing.count;
+        return `<span style="color:${ok ? '#81c784' : '#e57373'}">${item.name} x${ing.count} (${has})</span>`;
       }).join(', ');
 
+      let reqText = '';
+      if (r.needWorkbench) reqText = ' [要:作業台]';
+      if (r.needCampfire) reqText = ' [要:焚き火]';
+
       card.innerHTML = `
-        <div class="craft-card-icon">${itemDef.icon}</div>
-        <div class="craft-card-info">
-          <div class="craft-card-name">${itemDef.name} ${recipe.count > 1 ? `x${recipe.count}` : ''}</div>
-          <div class="craft-card-cost">必要: ${ingText}</div>
-          ${recipe.requiresWorkbench && !nearWorkbench ? '<small style="color:#ef5350">※作業台が必要</small>' : ''}
-          ${recipe.requiresCampfire && !nearCampfire ? '<small style="color:#ef5350">※焚き火が必要</small>' : ''}
+        <div style="font-size:26px;">${targetItem.icon}</div>
+        <div class="craft-details">
+          <div class="craft-name">${targetItem.name} ${r.result.count > 1 ? `x${r.result.count}` : ''} <span style="font-size:10px; color:#ffb74d;">${reqText}</span></div>
+          <div class="craft-mats">${ingHtml}</div>
         </div>
       `;
 
       card.addEventListener('click', () => {
-        if (isAvailable) {
-          this.player.consumeIngredients(recipe.ingredients);
-          this.player.addItem(recipe.result, recipe.count);
-          sound.craft();
-          this.showToast(`${itemDef.name}をクラフトしました！`);
-          this.renderInventoryModal();
-          this.renderCraftingUI();
-          this.renderHotbarUI();
-        } else {
-          sound.playTone(150, 'sawtooth', 0.1, 0.1);
+        if (!canMakeRequirement) {
+          this.showToast(r.needWorkbench ? '作業台の近くで作成してください' : '焚き火の近くで作成してください');
+          return;
         }
+        if (!hasMats) {
+          this.showToast('素材が足りません');
+          return;
+        }
+
+        r.ingredients.forEach(req => {
+          let toRemove = req.count;
+          for (let i = 0; i < this.player.inventory.length; i++) {
+            const slot = this.player.inventory[i];
+            if (slot && slot.id === req.id) {
+              const take = Math.min(toRemove, slot.count);
+              this.player.removeItem(i, take);
+              toRemove -= take;
+              if (toRemove <= 0) break;
+            }
+          }
+        });
+
+        this.player.addItem(r.result.id, r.result.count);
+        sound.craft();
+        this.showToast(`🔨 ${targetItem.name} をクラフトしました！`);
+        this.renderCraftingUI();
+        this.renderInventoryModal();
+        this.renderHotbarUI();
       });
 
       listEl.appendChild(card);
@@ -564,7 +702,45 @@ class Game {
     this.player.stamina = 100;
     this.player.isDead = false;
     this.gameoverModal.classList.add('hidden');
-    this.showToast('新たな命で目覚めました！');
+    this.showToast('新たな命で島に目覚めました！');
+  }
+
+  // 二人称（カメラ視点）相対の移動方向計算
+  calculateCameraRelativeMovement() {
+    let inputFwd = 0;  // W (+1), S (-1)
+    let inputRight = 0; // D (+1), A (-1)
+
+    if (this.input.keys['KeyW'] || this.input.keys['ArrowUp']) inputFwd += 1;
+    if (this.input.keys['KeyS'] || this.input.keys['ArrowDown']) inputFwd -= 1;
+    if (this.input.keys['KeyD'] || this.input.keys['ArrowRight']) inputRight += 1;
+    if (this.input.keys['KeyA'] || this.input.keys['ArrowLeft']) inputRight -= 1;
+
+    if (inputFwd === 0 && inputRight === 0) {
+      this.input.moveDx = 0;
+      this.input.moveDy = 0;
+      return;
+    }
+
+    // カメラのワールド方向ベクトル（XZ平面）
+    const cam = this.renderer3d.camera;
+    const fwd = new THREE.Vector3();
+    cam.getWorldDirection(fwd);
+    fwd.y = 0;
+    fwd.normalize();
+
+    // 右ベクトル
+    const right = new THREE.Vector3();
+    right.crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
+
+    // 合成ベクトル (3Dワールド空間)
+    const move = new THREE.Vector3();
+    move.addScaledVector(fwd, inputFwd);
+    move.addScaledVector(right, inputRight);
+    move.normalize();
+
+    // 2Dゲーム空間 (x, y) へのマッピング: 3D X -> 2D X, 3D Z -> 2D Y
+    this.input.moveDx = move.x;
+    this.input.moveDy = move.z;
   }
 
   update(dt) {
@@ -581,20 +757,18 @@ class Game {
       this.screenShake = Math.max(0, this.screenShake - dt * 15);
     }
 
-    // カメラ追従
-    this.camera.x = this.player.x - this.camera.width / 2;
-    this.camera.y = (this.player.y * PITCH_RATIO) - (this.camera.height * 0.58);
-    this.updateMouseWorld();
+    // 二人称カメラ相対の移動ベクトルを算出
+    this.calculateCameraRelativeMovement();
 
     this.world.update(dt);
     this.player.update(dt, this.input, this.world, this.entities.buildings);
 
-    // ドロップ品
+    // ドロップアイテム処理
     for (let i = this.entities.droppedItems.length - 1; i >= 0; i--) {
       const item = this.entities.droppedItems[i];
       item.update(dt, this.player.x, this.player.y);
 
-      if (Math.hypot(this.player.x - item.x, this.player.y - item.y) < 26 && item.pickupDelay <= 0) {
+      if (Math.hypot(this.player.x - item.x, this.player.y - item.y) < 28 && item.pickupDelay <= 0) {
         const added = this.player.addItem(item.itemId, item.count);
         if (added > 0) {
           sound.pickup();
@@ -606,7 +780,7 @@ class Game {
       }
     }
 
-    // 建築物
+    // 建築物の更新
     for (let i = this.entities.buildings.length - 1; i >= 0; i--) {
       const b = this.entities.buildings[i];
       b.update(dt, this.entities.particles);
@@ -617,14 +791,17 @@ class Game {
       }
     }
 
+    // 動物の更新
     for (let i = 0; i < this.entities.animals.length; i++) {
       this.entities.animals[i].update(dt, this.player.x, this.player.y, this.world);
     }
 
+    // 敵モンスターの更新
     for (let i = this.entities.enemies.length - 1; i >= 0; i--) {
       this.entities.enemies[i].update(dt, this.player, this.entities.buildings, this.world);
     }
 
+    // パーティクル＆ポップアップ
     for (let i = this.entities.particles.length - 1; i >= 0; i--) {
       this.entities.particles[i].update(dt);
       if (this.entities.particles[i].life <= 0) this.entities.particles.splice(i, 1);
@@ -634,21 +811,9 @@ class Game {
       if (this.entities.popups[i].life <= 0) this.entities.popups.splice(i, 1);
     }
 
-    // 大気浮遊ダスト
-    for (let i = 0; i < this.entities.ambientParticles.length; i++) {
-      const ap = this.entities.ambientParticles[i];
-      ap.x += ap.vx * dt;
-      ap.y += ap.vy * dt;
-      ap.phase += dt * 2.5;
-
-      if (ap.x < 0) ap.x = this.world.width * TILE_SIZE;
-      if (ap.x > this.world.width * TILE_SIZE) ap.x = 0;
-      if (ap.y < 0) ap.y = this.world.height * TILE_SIZE;
-      if (ap.y > this.world.height * TILE_SIZE) ap.y = 0;
-    }
-
+    // スポナー
     this.enemySpawnTimer += dt;
-    if (this.world.isNight() && this.entities.enemies.length < 7 && this.enemySpawnTimer > 6.0) {
+    if (this.world.isNight() && this.entities.enemies.length < 8 && this.enemySpawnTimer > 6.0) {
       this.spawnEnemy();
       this.enemySpawnTimer = 0;
     }
@@ -659,6 +824,7 @@ class Game {
       this.animalSpawnTimer = 0;
     }
 
+    // クエスト進行度チェック
     const currentQuest = this.quests[this.currentQuestIdx];
     if (currentQuest && currentQuest.check()) {
       sound.questComplete();
@@ -666,7 +832,7 @@ class Game {
       this.currentQuestIdx++;
     }
 
-    // HUD更新のスロットリング（毎フレームのDOM書き換えを防止し、0.1秒ごとに更新）
+    // HUD更新のスロットリング
     this.hudUpdateTimer += dt;
     if (this.hudUpdateTimer >= 0.1) {
       this.updateHUD();
@@ -674,7 +840,6 @@ class Game {
     }
   }
 
-  // スロットル化されたHUD更新
   updateHUD() {
     this.healthBar.style.width = `${(this.player.hp / this.player.maxHp) * 100}%`;
     this.healthText.textContent = `${Math.ceil(this.player.hp)} / ${this.player.maxHp}`;
@@ -695,199 +860,57 @@ class Game {
     const q = this.quests[this.currentQuestIdx];
     this.questText.textContent = q ? q.text : '全目標クリア！自由な開拓を楽しもう！';
 
-    // ミニマップ描画（事前レンダリング済みなので一瞬で完了）
+    // ミニマップ描画
     this.world.renderMinimap(this.minimapCanvas, this.player.x, this.player.y);
   }
 
-  // 高速レンダリング
-  render() {
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+  // 3D レンダリング
+  render(dt) {
+    // 昼夜ライティング
+    this.renderer3d.updateLighting(this.world, dt);
 
-    this.ctx.save();
-    if (this.screenShake > 0) {
-      const shakeX = (Math.random() - 0.5) * this.screenShake;
-      const shakeY = (Math.random() - 0.5) * this.screenShake;
-      this.ctx.translate(shakeX, shakeY);
-    }
+    // 二人称カメラ更新（観察者の目線からプレイヤーを見つめる）
+    this.renderer3d.updateSecondPersonCamera(this.player, this.entities.enemies, this.entities.animals, dt);
 
-    // 1. 地面タイル
-    this.world.renderTiles(this.ctx, this.camera);
+    // プレイヤー3Dモデルのアニメーション
+    this.renderer3d.updatePlayer(this.player, this.world, dt);
 
-    // 2. ドロップアイテム
-    for (let i = 0; i < this.entities.droppedItems.length; i++) {
-      this.entities.droppedItems[i].render(this.ctx, this.camera);
-    }
+    // 自然リソース（木・岩・茂み）の同期
+    this.renderer3d.syncResources(this.world.resources, this.world, dt);
 
-    // 3. 自然リソース描画
-    this.world.renderResources(this.ctx, this.camera);
+    // 建築物（焚き火・松明・壁・ドア・チェスト）の同期
+    this.renderer3d.syncBuildings(this.entities.buildings, this.world, dt);
 
-    // 4. 動的オブジェクトのYソート描画
-    const renderQueue = [];
-    for (let i = 0; i < this.entities.buildings.length; i++) {
-      const b = this.entities.buildings[i];
-      renderQueue.push({ y: b.y, obj: b });
-    }
-    for (let i = 0; i < this.entities.animals.length; i++) {
-      const a = this.entities.animals[i];
-      renderQueue.push({ y: a.y, obj: a });
-    }
-    for (let i = 0; i < this.entities.enemies.length; i++) {
-      const e = this.entities.enemies[i];
-      renderQueue.push({ y: e.y, obj: e });
-    }
-    renderQueue.push({ y: this.player.y, obj: this.player });
+    // 野生動物の同期
+    this.renderer3d.syncAnimals(this.entities.animals, this.world, dt);
 
-    renderQueue.sort((a, b) => a.y - b.y);
-    for (let i = 0; i < renderQueue.length; i++) {
-      renderQueue[i].obj.render(this.ctx, this.camera);
-    }
+    // 敵モンスターの同期
+    this.renderer3d.syncEnemies(this.entities.enemies, this.world, dt);
 
-    // 5. パーティクル
-    for (let i = 0; i < this.entities.particles.length; i++) {
-      this.entities.particles[i].render(this.ctx, this.camera);
-    }
+    // ドロップアイテムの同期
+    this.renderer3d.syncDroppedItems(this.entities.droppedItems, this.world, dt);
 
-    // 6. 大気ホタル（画面内のみ）
-    const isNight = this.world.isNight();
-    for (let i = 0; i < this.entities.ambientParticles.length; i++) {
-      const ap = this.entities.ambientParticles[i];
-      const sx = ap.x - this.camera.x;
-      const sy = (ap.y * PITCH_RATIO) - this.camera.y;
-
-      if (sx >= 0 && sx <= this.camera.width && sy >= 0 && sy <= this.camera.height) {
-        const glow = (Math.sin(ap.phase) + 1) * 0.5;
-        this.ctx.fillStyle = isNight ? `rgba(220, 255, 100, ${glow * 0.8})` : `rgba(255, 255, 255, ${glow * 0.35})`;
-        this.ctx.beginPath();
-        this.ctx.arc(sx, sy, ap.radius, 0, Math.PI * 2);
-        this.ctx.fill();
-      }
-    }
-
-    // 7. 高速化された動的ライティング
-    this.renderLighting();
-
-    // 8. ポップアップ
-    for (let i = 0; i < this.entities.popups.length; i++) {
-      this.entities.popups[i].render(this.ctx, this.camera);
-    }
-
-    this.ctx.restore();
-  }
-
-  // 事前確保バッファを用いた超高速ライティング
-  renderLighting() {
-    const ambient = this.world.getAmbientLight();
-    const sky = this.world.getSkyColor();
-
-    if (sky) {
-      this.ctx.save();
-      this.ctx.fillStyle = `rgba(${sky.r}, ${sky.g}, ${sky.b}, ${sky.a})`;
-      this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-      this.ctx.restore();
-    }
-
-    if (ambient >= 0.98) return;
-
-    this.ctx.save();
-
-    const darkness = 1.0 - ambient;
-    const dCtx = this.darkCtx;
-
-    // 既存のオフスクリーンキャンバスをクリア＆再利用（メモリ再確保ゼロ！）
-    dCtx.globalCompositeOperation = 'source-over';
-    dCtx.fillStyle = `rgba(6, 10, 20, ${Math.min(0.92, darkness * 0.95)})`;
-    dCtx.fillRect(0, 0, this.darkCanvas.width, this.darkCanvas.height);
-
-    // 光源のくり抜き
-    dCtx.globalCompositeOperation = 'destination-out';
-
+    // 建築物設置の3Dプレビュー
     const held = this.player.getHeldItem();
-    const pRadius = held && held.id === 'torch' ? 260 : 110;
-    const pScreenX = this.player.x - this.camera.x;
-    const pScreenY = (this.player.y * PITCH_RATIO) - this.camera.y - 12;
+    const heldDef = held ? ITEMS[held.id] : null;
+    this.renderer3d.updatePlacementPreview(heldDef, true);
 
-    const pGrad = dCtx.createRadialGradient(pScreenX, pScreenY, 15, pScreenX, pScreenY, pRadius);
-    pGrad.addColorStop(0, 'rgba(0, 0, 0, 1)');
-    pGrad.addColorStop(0.7, 'rgba(0, 0, 0, 0.7)');
-    pGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    dCtx.fillStyle = pGrad;
-    dCtx.beginPath();
-    dCtx.arc(pScreenX, pScreenY, pRadius, 0, Math.PI * 2);
-    dCtx.fill();
-
-    for (let i = 0; i < this.entities.buildings.length; i++) {
-      const b = this.entities.buildings[i];
-      if (b.type === 'campfire' || b.type === 'torch') {
-        const bRadius = b.type === 'campfire' ? 270 : 185;
-        const bScreenX = b.x - this.camera.x;
-        const bScreenY = (b.y * PITCH_RATIO) - this.camera.y;
-
-        // 画面外の光源はスキップ
-        if (
-          bScreenX + bRadius < 0 ||
-          bScreenX - bRadius > this.camera.width ||
-          bScreenY + bRadius < 0 ||
-          bScreenY - bRadius > this.camera.height
-        ) {
-          continue;
-        }
-
-        const bGrad = dCtx.createRadialGradient(bScreenX, bScreenY, 20, bScreenX, bScreenY, bRadius);
-        bGrad.addColorStop(0, 'rgba(0, 0, 0, 1)');
-        bGrad.addColorStop(0.65, 'rgba(0, 0, 0, 0.65)');
-        bGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-        dCtx.fillStyle = bGrad;
-        dCtx.beginPath();
-        dCtx.arc(bScreenX, bScreenY, bRadius, 0, Math.PI * 2);
-        dCtx.fill();
-      }
-    }
-
-    // メインキャンバスに高速貼り付け
-    this.ctx.drawImage(this.darkCanvas, 0, 0);
-
-    // 暖色ブルーム
-    this.ctx.globalCompositeOperation = 'screen';
-    for (let i = 0; i < this.entities.buildings.length; i++) {
-      const b = this.entities.buildings[i];
-      if (b.type === 'campfire' || b.type === 'torch') {
-        const bScreenX = b.x - this.camera.x;
-        const bScreenY = (b.y * PITCH_RATIO) - this.camera.y;
-        const glowRadius = b.type === 'campfire' ? 130 : 75;
-
-        if (
-          bScreenX + glowRadius < 0 ||
-          bScreenX - glowRadius > this.camera.width ||
-          bScreenY + glowRadius < 0 ||
-          bScreenY - glowRadius > this.camera.height
-        ) {
-          continue;
-        }
-
-        const warmGlow = this.ctx.createRadialGradient(bScreenX, bScreenY, 5, bScreenX, bScreenY, glowRadius);
-        warmGlow.addColorStop(0, 'rgba(255, 160, 40, 0.3)');
-        warmGlow.addColorStop(1, 'rgba(255, 100, 20, 0)');
-        this.ctx.fillStyle = warmGlow;
-        this.ctx.beginPath();
-        this.ctx.arc(bScreenX, bScreenY, glowRadius, 0, Math.PI * 2);
-        this.ctx.fill();
-      }
-    }
-
-    this.ctx.restore();
+    // Three.js レンダリング実行
+    this.renderer3d.render();
   }
 
-  gameLoop(now) {
-    const dt = Math.min((now - this.lastTime) / 1000, 0.1);
-    this.lastTime = now;
+  gameLoop(time) {
+    const dt = Math.min((time - this.lastTime) / 1000, 0.1);
+    this.lastTime = time;
 
     this.update(dt);
-    this.render();
+    this.render(dt);
 
     requestAnimationFrame((t) => this.gameLoop(t));
   }
 }
 
-window.addEventListener('load', () => {
+// ゲーム開始
+window.addEventListener('DOMContentLoaded', () => {
   new Game();
 });
