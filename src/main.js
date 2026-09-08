@@ -1,6 +1,6 @@
-// メインゲームループ、UI制御、シネマティック動的ライティング、環境ダスト、スクリーンシェイク
+// メインゲームループ、三人称（2.5D クォータービューTPS）カメラ、Yソート深度レンダリング、動的ライティング
 
-import { World, TILE_SIZE } from './world.js';
+import { World, TILE_SIZE, PITCH_RATIO } from './world.js';
 import { Player } from './player.js';
 import { Building, Animal, Enemy, DroppedItem, Particle, PopupText } from './entities.js';
 import { ITEMS, RECIPES } from './items.js';
@@ -12,7 +12,7 @@ class Game {
     this.ctx = this.canvas.getContext('2d');
     this.minimapCanvas = document.getElementById('minimapCanvas');
 
-    // カメラ
+    // カメラ（三人称視点）
     this.camera = {
       x: 0,
       y: 0,
@@ -20,7 +20,6 @@ class Game {
       height: window.innerHeight
     };
 
-    // スクリーンシェイク
     this.screenShake = 0;
 
     // 入力
@@ -43,7 +42,7 @@ class Game {
       droppedItems: [],
       particles: [],
       popups: [],
-      ambientParticles: [] // 浮遊する光の胞子・ホタル
+      ambientParticles: []
     };
 
     // クエストシステム
@@ -103,12 +102,10 @@ class Game {
 
     this.player = new Player(spawnX, spawnY);
 
-    // 初期動物
     for (let i = 0; i < 16; i++) {
       this.spawnAnimal();
     }
 
-    // 大気パーティクル（ホタル・空気中のダスト）
     for (let i = 0; i < 35; i++) {
       this.entities.ambientParticles.push({
         x: Math.random() * (this.world.width * TILE_SIZE),
@@ -191,7 +188,7 @@ class Game {
           const dist = Math.hypot(this.input.mouseWorldX - b.x, this.input.mouseWorldY - b.y);
           const pDist = Math.hypot(this.player.x - b.x, this.player.y - b.y);
 
-          if (dist < b.radius + 16 && pDist < 95) {
+          if (dist < b.radius + 18 && pDist < 95) {
             if (b.type === 'door') {
               b.isOpen = !b.isOpen;
               sound.build();
@@ -224,9 +221,10 @@ class Game {
     this.screenShake = Math.max(this.screenShake, amount);
   }
 
+  // スクリーン座標から三人称ワールド座標への逆変換（PITCH_RATIO 対応）
   updateMouseWorld() {
     this.input.mouseWorldX = this.input.mouseX + this.camera.x;
-    this.input.mouseWorldY = this.input.mouseY + this.camera.y;
+    this.input.mouseWorldY = (this.input.mouseY + this.camera.y) / PITCH_RATIO;
     this.input.mouseWorldAngle = Math.atan2(
       this.input.mouseWorldY - this.player.y,
       this.input.mouseWorldX - this.player.x
@@ -555,33 +553,29 @@ class Game {
       return;
     }
 
-    // スクリーンシェイクの減衰
     if (this.screenShake > 0) {
       this.screenShake = Math.max(0, this.screenShake - dt * 15);
     }
 
-    // カメラ位置
+    // 三人称カメラ追従（プレイヤーを画面中央やや下側に配置し、背後から前方を望むアングル）
     this.camera.x = this.player.x - this.camera.width / 2;
-    this.camera.y = this.player.y - this.camera.height / 2;
+    this.camera.y = (this.player.y * PITCH_RATIO) - (this.camera.height * 0.58);
     this.updateMouseWorld();
 
-    // ワールド更新
     this.world.update(dt);
-
-    // プレイヤー更新
     this.player.update(dt, this.input, this.world, this.entities.buildings);
 
-    // ドロップアイテム
+    // ドロップ品
     for (let i = this.entities.droppedItems.length - 1; i >= 0; i--) {
       const item = this.entities.droppedItems[i];
       item.update(dt, this.player.x, this.player.y);
 
-      if (Math.hypot(this.player.x - item.x, this.player.y - item.y) < 24 && item.pickupDelay <= 0) {
+      if (Math.hypot(this.player.x - item.x, this.player.y - item.y) < 26 && item.pickupDelay <= 0) {
         const added = this.player.addItem(item.itemId, item.count);
         if (added > 0) {
           sound.pickup();
           const def = ITEMS[item.itemId];
-          this.entities.popups.push(new PopupText(`+${item.count} ${def ? def.name : item.itemId}`, this.player.x, this.player.y - 18, '#81c784'));
+          this.entities.popups.push(new PopupText(`+${item.count} ${def ? def.name : item.itemId}`, this.player.x, this.player.y, '#81c784'));
           this.entities.droppedItems.splice(i, 1);
           this.renderHotbarUI();
         }
@@ -599,18 +593,15 @@ class Game {
       }
     }
 
-    // 動物
     for (const animal of this.entities.animals) {
       animal.update(dt, this.player.x, this.player.y, this.world);
     }
 
-    // 敵
     for (let i = this.entities.enemies.length - 1; i >= 0; i--) {
       const enemy = this.entities.enemies[i];
       enemy.update(dt, this.player, this.entities.buildings, this.world);
     }
 
-    // パーティクル＆ポップアップ
     for (let i = this.entities.particles.length - 1; i >= 0; i--) {
       this.entities.particles[i].update(dt);
       if (this.entities.particles[i].life <= 0) this.entities.particles.splice(i, 1);
@@ -620,20 +611,18 @@ class Game {
       if (this.entities.popups[i].life <= 0) this.entities.popups.splice(i, 1);
     }
 
-    // 大気浮遊ダストの更新
+    // 大気浮遊ダスト
     for (const ap of this.entities.ambientParticles) {
       ap.x += ap.vx * dt;
       ap.y += ap.vy * dt;
       ap.phase += dt * 2.5;
 
-      // 画面端ループ
       if (ap.x < 0) ap.x = this.world.width * TILE_SIZE;
       if (ap.x > this.world.width * TILE_SIZE) ap.x = 0;
       if (ap.y < 0) ap.y = this.world.height * TILE_SIZE;
       if (ap.y > this.world.height * TILE_SIZE) ap.y = 0;
     }
 
-    // スポナー
     this.enemySpawnTimer += dt;
     if (this.world.isNight() && this.entities.enemies.length < 8 && this.enemySpawnTimer > 5.5) {
       this.spawnEnemy();
@@ -646,7 +635,6 @@ class Game {
       this.animalSpawnTimer = 0;
     }
 
-    // クエスト進行度チェック
     const currentQuest = this.quests[this.currentQuestIdx];
     if (currentQuest && currentQuest.check()) {
       sound.questComplete();
@@ -680,56 +668,59 @@ class Game {
     this.world.renderMinimap(this.minimapCanvas, this.player.x, this.player.y);
   }
 
+  // 三人称レンダリング（全オブジェクトのYソートによる自然な立体オクルージョン）
   render() {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
     this.ctx.save();
-    // スクリーンシェイクの適用
     if (this.screenShake > 0) {
       const shakeX = (Math.random() - 0.5) * this.screenShake;
       const shakeY = (Math.random() - 0.5) * this.screenShake;
       this.ctx.translate(shakeX, shakeY);
     }
 
-    // 1. タイルマップ
+    // 1. 地面（三人称2.5Dタイルマップ）
     this.world.renderTiles(this.ctx, this.camera);
 
-    // 2. 建築物
-    for (const b of this.entities.buildings) {
-      b.render(this.ctx, this.camera);
-    }
-
-    // 3. 自然リソース
-    this.world.renderResources(this.ctx, this.camera);
-
-    // 4. ドロップアイテム
+    // 2. ドロップアイテム（地面の上に描画）
     for (const item of this.entities.droppedItems) {
       item.render(this.ctx, this.camera);
     }
 
-    // 5. 動物
-    for (const a of this.entities.animals) {
-      a.render(this.ctx, this.camera);
+    // 3. 立体オブジェクトのYソート統合描画
+    // （自然リソース、建築物、動物、敵、プレイヤーを奥から手前に順次描画）
+    const renderList = [];
+
+    for (const res of this.world.resources) {
+      renderList.push({ y: res.y, render: () => {} }); // resourcesはworld.renderResourcesで一括描画
     }
 
-    // 6. 敵
-    for (const e of this.entities.enemies) {
-      e.render(this.ctx, this.camera);
+    // 自然リソースの一括描画
+    this.world.renderResources(this.ctx, this.camera);
+
+    // キャラクター・動的エンティティのYソート
+    const dynamicEntities = [
+      ...this.entities.buildings.map(b => ({ y: b.y, render: () => b.render(this.ctx, this.camera) })),
+      ...this.entities.animals.map(a => ({ y: a.y, render: () => a.render(this.ctx, this.camera) })),
+      ...this.entities.enemies.map(e => ({ y: e.y, render: () => e.render(this.ctx, this.camera) })),
+      { y: this.player.y, render: () => this.player.render(this.ctx, this.camera) }
+    ];
+
+    dynamicEntities.sort((a, b) => a.y - b.y);
+    for (const item of dynamicEntities) {
+      item.render();
     }
 
-    // 7. プレイヤー
-    this.player.render(this.ctx, this.camera);
-
-    // 8. パーティクル
+    // 4. パーティクル
     for (const p of this.entities.particles) {
       p.render(this.ctx, this.camera);
     }
 
-    // 9. 大気中の微粒子（ホタル、浮遊ダスト）
+    // 5. 大気微粒子（ホタル）
     const isNight = this.world.isNight();
     for (const ap of this.entities.ambientParticles) {
       const sx = ap.x - this.camera.x;
-      const sy = ap.y - this.camera.y;
+      const sy = (ap.y * PITCH_RATIO) - this.camera.y;
 
       if (sx >= 0 && sx <= this.camera.width && sy >= 0 && sy <= this.camera.height) {
         const glow = (Math.sin(ap.phase) + 1) * 0.5;
@@ -740,10 +731,10 @@ class Game {
       }
     }
 
-    // 10. シネマティック動的ライティング
+    // 6. 三人称動的ライティング
     this.renderLighting();
 
-    // 11. ポップアップテキスト
+    // 7. ポップアップテキスト
     for (const pop of this.entities.popups) {
       pop.render(this.ctx, this.camera);
     }
@@ -751,12 +742,10 @@ class Game {
     this.ctx.restore();
   }
 
-  // 映画のようなシネマティック動的ライティング（滑らかなフォールオフと暖色ブルーム）
   renderLighting() {
     const ambient = this.world.getAmbientLight();
     const sky = this.world.getSkyColor();
 
-    // 夕暮れ・朝焼け・夜のカラーグレーディングオーバーレイ
     if (sky) {
       this.ctx.save();
       this.ctx.fillStyle = `rgba(${sky.r}, ${sky.g}, ${sky.b}, ${sky.a})`;
@@ -768,24 +757,22 @@ class Game {
 
     this.ctx.save();
 
-    // 暗闇バッファ
     const darkness = 1.0 - ambient;
     const darkCanvas = document.createElement('canvas');
     darkCanvas.width = this.canvas.width;
     darkCanvas.height = this.canvas.height;
     const dCtx = darkCanvas.getContext('2d');
 
-    // コバルトブラックの夜の闇
     dCtx.fillStyle = `rgba(6, 10, 20, ${Math.min(0.93, darkness * 0.96)})`;
     dCtx.fillRect(0, 0, darkCanvas.width, darkCanvas.height);
 
     dCtx.globalCompositeOperation = 'destination-out';
 
-    // プレイヤーの光源
+    // プレイヤー光源（三人称座標）
     const held = this.player.getHeldItem();
     let pRadius = held && held.id === 'torch' ? 260 : 110;
     const pScreenX = this.player.x - this.camera.x;
-    const pScreenY = this.player.y - this.camera.y;
+    const pScreenY = (this.player.y * PITCH_RATIO) - this.camera.y - 12;
 
     const pGrad = dCtx.createRadialGradient(pScreenX, pScreenY, 15, pScreenX, pScreenY, pRadius);
     pGrad.addColorStop(0, 'rgba(0, 0, 0, 1)');
@@ -796,13 +783,13 @@ class Game {
     dCtx.arc(pScreenX, pScreenY, pRadius, 0, Math.PI * 2);
     dCtx.fill();
 
-    // 焚き火・松明の光源（ゆらめくフォールオフ）
+    // 建築物光源
     for (const b of this.entities.buildings) {
       if (b.type === 'campfire' || b.type === 'torch') {
         const flicker = Math.sin(performance.now() * 0.008 + b.x) * 10;
         const bRadius = (b.type === 'campfire' ? 280 : 190) + flicker;
         const bScreenX = b.x - this.camera.x;
-        const bScreenY = b.y - this.camera.y;
+        const bScreenY = (b.y * PITCH_RATIO) - this.camera.y;
 
         const bGrad = dCtx.createRadialGradient(bScreenX, bScreenY, 20, bScreenX, bScreenY, bRadius);
         bGrad.addColorStop(0, 'rgba(0, 0, 0, 1)');
@@ -817,12 +804,12 @@ class Game {
 
     this.ctx.drawImage(darkCanvas, 0, 0);
 
-    // 焚き火と松明のウォームブルーム（暖色グローの加算合成）
+    // 暖色ブルーム
     this.ctx.globalCompositeOperation = 'screen';
     for (const b of this.entities.buildings) {
       if (b.type === 'campfire' || b.type === 'torch') {
         const bScreenX = b.x - this.camera.x;
-        const bScreenY = b.y - this.camera.y;
+        const bScreenY = (b.y * PITCH_RATIO) - this.camera.y;
         const glowRadius = b.type === 'campfire' ? 140 : 80;
 
         const warmGlow = this.ctx.createRadialGradient(bScreenX, bScreenY, 5, bScreenX, bScreenY, glowRadius);
