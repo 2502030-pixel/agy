@@ -11,6 +11,9 @@
     <!-- メインゲームキャンバス -->
     <canvas id="gameCanvas"></canvas>
 
+    <!-- 視界ジャック・フルスクリーン効果レイヤー -->
+    <div id="vision-jack-overlay"></div>
+
     <!-- UIオーバーレイ -->
     <div id="ui-layer">
       <!-- 上部ステータスバー -->
@@ -19,6 +22,13 @@
           <div id="day-counter">Day 1</div>
           <div id="clock-display">08:00</div>
           <div id="sun-moon-icon">☀️</div>
+        </div>
+
+        <!-- 二人称 3D 視点 HUD -->
+        <div id="second-person-hud" class="hud-panel">
+          <div class="sp-title">👁️ 二人称 3D 視点</div>
+          <div class="sp-status">観察者: <span id="camera-target-label">守護精霊 ナビ</span></div>
+          <button id="switch-camera-btn" class="sp-btn" title="視界ジャック切替 [V]">[V] 視界ジャック切替</button>
         </div>
 
         <div id="quest-tracker" class="hud-panel">
@@ -72,10 +82,12 @@
 
       <!-- 右下アクションボタン/ヘルプ -->
       <div id="help-hint" class="hud-panel">
-        <div>[E] インベントリ / クラフト</div>
+        <div>[V] 視界ジャック / 二人称視点切替</div>
+        <div>[右ドラッグ] カメラ視点旋回</div>
         <div>[WASD] 移動 / [Shift] ダッシュ</div>
         <div>[左クリック] 攻撃・採取・使用</div>
-        <div>[右クリック] 食べる・設置</div>
+        <div>[右クリック] 食べる・3D建築設置</div>
+        <div>[E] インベントリ / クラフト</div>
       </div>
     </div>
 

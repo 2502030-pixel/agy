@@ -583,3 +583,81 @@ canvas#gameCanvas {
   85% { opacity: 1; transform: translateX(0); }
   100% { opacity: 0; transform: translateX(30px); }
 }
+
+/* 二人称 3D HUD & 視界ジャック (Second-Person Perspective) */
+#second-person-hud {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: rgba(15, 23, 42, 0.82);
+  border: 1px solid rgba(0, 229, 255, 0.4);
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.2);
+}
+
+.sp-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #00e5ff;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.sp-status {
+  font-size: 13px;
+  color: #f8fafc;
+  font-weight: 600;
+}
+
+#camera-target-label {
+  color: #ffca28;
+}
+
+.sp-btn {
+  background: linear-gradient(135deg, #0284c7, #0369a1);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 2px;
+  transition: all 0.2s ease;
+}
+
+.sp-btn:hover {
+  background: linear-gradient(135deg, #0ea5e9, #0284c7);
+  box-shadow: 0 0 8px rgba(14, 165, 233, 0.5);
+  transform: translateY(-1px);
+}
+
+/* 視界ジャック・フルスクリーンオーバーレイ */
+#vision-jack-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+  transition: all 0.3s ease;
+}
+
+#vision-jack-overlay.wolf-vision {
+  box-shadow: inset 0 0 80px rgba(255, 23, 68, 0.55), inset 0 0 160px rgba(183, 28, 28, 0.4);
+  background: radial-gradient(circle, rgba(255, 23, 68, 0.05) 0%, rgba(136, 14, 79, 0.25) 100%);
+}
+
+#vision-jack-overlay.zombie-vision {
+  box-shadow: inset 0 0 80px rgba(118, 255, 3, 0.45), inset 0 0 160px rgba(27, 94, 32, 0.5);
+  background: radial-gradient(circle, rgba(118, 255, 3, 0.04) 0%, rgba(27, 94, 32, 0.25) 100%);
+}
+
+#vision-jack-overlay.prey-vision {
+  box-shadow: inset 0 0 80px rgba(255, 214, 0, 0.4), inset 0 0 160px rgba(230, 81, 0, 0.3);
+}
+
+#vision-jack-overlay.spirit-vision {
+  box-shadow: inset 0 0 60px rgba(0, 229, 255, 0.15);
+}
