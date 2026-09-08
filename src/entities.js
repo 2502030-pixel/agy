@@ -1,4 +1,4 @@
-// 三人称（2.5D クォータービュー）対応のエンティティ描画（ドロップ品、建築物、動物、敵、パーティクル、ポップアップ）
+// 最適化された三人称（2.5D）エンティティ描画（画面外カリングとアロケーション削減）
 
 import { ITEMS } from './items.js';
 import { PITCH_RATIO } from './world.js';
@@ -36,30 +36,27 @@ export class DroppedItem {
 
   render(ctx, camera) {
     const sx = this.x - camera.x;
-    const floatY = Math.sin(this.floatTimer) * 5;
     const groundSy = (this.baseY * PITCH_RATIO) - camera.y;
-    const sy = groundSy - 10 + floatY; // 浮遊
+
+    // 画面外カリング
+    if (sx < -30 || sx > camera.width + 30 || groundSy < -30 || groundSy > camera.height + 30) {
+      return;
+    }
+
+    const floatY = Math.sin(this.floatTimer) * 4;
+    const sy = groundSy - 8 + floatY;
 
     const itemDef = ITEMS[this.itemId];
     if (!itemDef) return;
 
     // 接地ソフトシャドウ
-    const shadowScale = 1 - (floatY + 5) / 30;
-    ctx.fillStyle = `rgba(10, 15, 25, ${0.3 * shadowScale})`;
+    ctx.fillStyle = 'rgba(10, 15, 25, 0.28)';
     ctx.beginPath();
-    ctx.ellipse(sx, groundSy + 2, 10 * shadowScale, 4.5 * shadowScale, 0, 0, Math.PI * 2);
+    ctx.ellipse(sx, groundSy + 2, 8, 3.5, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // アイテム背後グロー
-    const glowGrad = ctx.createRadialGradient(sx, sy, 2, sx, sy, 16);
-    glowGrad.addColorStop(0, 'rgba(255, 255, 255, 0.45)');
-    glowGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    ctx.fillStyle = glowGrad;
-    ctx.beginPath();
-    ctx.arc(sx, sy, 16, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.font = '20px serif';
+    // アイテムアイコン
+    ctx.font = '18px serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(itemDef.icon, sx, sy);
@@ -67,14 +64,14 @@ export class DroppedItem {
     if (this.count > 1) {
       ctx.fillStyle = '#1e232d';
       ctx.beginPath();
-      ctx.roundRect(sx + 4, sy + 2, 18, 12, 3);
+      ctx.roundRect(sx + 3, sy + 2, 16, 11, 2.5);
       ctx.fill();
 
       ctx.fillStyle = '#ffca28';
-      ctx.font = 'bold 9px sans-serif';
+      ctx.font = 'bold 8.5px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(`${this.count}`, sx + 13, sy + 8);
+      ctx.fillText(`${this.count}`, sx + 11, sy + 7.5);
     }
   }
 }
@@ -97,26 +94,15 @@ export class Building {
     this.animTime += dt;
 
     if (this.type === 'campfire' || this.type === 'torch') {
-      if (Math.random() < 0.35) {
+      if (Math.random() < 0.3) {
         particles.push(new Particle(
           this.x + (Math.random() - 0.5) * 12,
           this.y,
-          (Math.random() - 0.5) * 24,
-          -Math.random() * 45 - 20,
+          (Math.random() - 0.5) * 20,
+          -Math.random() * 40 - 20,
           Math.random() < 0.5 ? '#ffb300' : '#ff5722',
-          0.7,
+          0.6,
           2.5
-        ));
-      }
-      if (Math.random() < 0.15) {
-        particles.push(new Particle(
-          this.x + (Math.random() - 0.5) * 8,
-          this.y - 12,
-          (Math.random() - 0.5) * 15,
-          -Math.random() * 25 - 10,
-          'rgba(180, 180, 190, 0.4)',
-          1.2,
-          4.0
         ));
       }
     }
@@ -126,6 +112,11 @@ export class Building {
     const sx = this.x - camera.x;
     const sy = (this.y * PITCH_RATIO) - camera.y;
 
+    // 画面外カリング
+    if (sx < -40 || sx > camera.width + 40 || sy < -50 || sy > camera.height + 40) {
+      return;
+    }
+
     // 接地影
     ctx.fillStyle = 'rgba(8, 12, 20, 0.35)';
     ctx.beginPath();
@@ -133,7 +124,6 @@ export class Building {
     ctx.fill();
 
     if (this.type === 'campfire') {
-      // 台座の石組み
       ctx.fillStyle = '#546e7a';
       for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) {
         const stoneX = sx + Math.cos(a) * 15;
@@ -143,7 +133,6 @@ export class Building {
         ctx.fill();
       }
 
-      // 薪
       ctx.fillStyle = '#4e342e';
       ctx.save();
       ctx.translate(sx, sy - 2);
@@ -153,16 +142,14 @@ export class Building {
       ctx.fillRect(-12, -3, 24, 6);
       ctx.restore();
 
-      // 炭コア
       ctx.fillStyle = '#ff3d00';
       ctx.beginPath();
       ctx.arc(sx, sy - 3, 7, 0, Math.PI * 2);
       ctx.fill();
 
-      // 躍動する炎
       const fTime = this.animTime * 6;
       const flameOffX = Math.sin(fTime) * 3;
-      const flameH = 20 + Math.sin(fTime * 1.5) * 5;
+      const flameH = 19 + Math.sin(fTime * 1.5) * 4;
 
       ctx.fillStyle = '#ff6f00';
       ctx.beginPath();
@@ -181,17 +168,11 @@ export class Building {
       ctx.fill();
 
     } else if (this.type === 'workbench') {
-      // 作業台（手前正面に見える三人称モデル）
-      const benchGrad = ctx.createLinearGradient(sx - 18, sy - 16, sx + 18, sy + 8);
-      benchGrad.addColorStop(0, '#8d6e63');
-      benchGrad.addColorStop(0.5, '#6d4c41');
-      benchGrad.addColorStop(1, '#4e342e');
-      ctx.fillStyle = benchGrad;
+      ctx.fillStyle = '#6d4c41';
       ctx.beginPath();
       ctx.roundRect(sx - 18, sy - 18, 36, 24, 3);
       ctx.fill();
 
-      // 作業台の脚部（立体感）
       ctx.fillStyle = '#3e2723';
       ctx.fillRect(sx - 16, sy + 6, 6, 8);
       ctx.fillRect(sx + 10, sy + 6, 6, 8);
@@ -200,18 +181,12 @@ export class Building {
       ctx.lineWidth = 1.5;
       ctx.strokeRect(sx - 18, sy - 18, 36, 24);
 
-      // 万力・金敷き
       ctx.fillStyle = '#37474f';
       ctx.fillRect(sx - 14, sy - 14, 8, 6);
-      ctx.fillStyle = '#78909c';
-      ctx.fillRect(sx - 12, sy - 12, 4, 2);
-
-      // 巻物
       ctx.fillStyle = '#fff9c4';
       ctx.fillRect(sx + 2, sy - 12, 11, 4);
 
     } else if (this.type === 'wall') {
-      // 木の防壁（垂直にそびえ立つ三人称ビルディング）
       ctx.fillStyle = '#4e342e';
       ctx.beginPath();
       ctx.roundRect(sx - 18, sy - 28, 36, 36, 2);
@@ -222,19 +197,9 @@ export class Building {
       ctx.fillRect(sx - 5, sy - 26, 10, 32);
       ctx.fillRect(sx + 6, sy - 26, 10, 32);
 
-      // 鉄バンド
       ctx.fillStyle = '#37474f';
       ctx.fillRect(sx - 18, sy - 16, 36, 4);
       ctx.fillRect(sx - 18, sy - 2, 36, 4);
-
-      // リベット
-      ctx.fillStyle = '#cfd8dc';
-      for (const rx of [-12, 0, 12]) {
-        ctx.beginPath();
-        ctx.arc(sx + rx, sy - 14, 1.5, 0, Math.PI * 2);
-        ctx.arc(sx + rx, sy, 1.5, 0, Math.PI * 2);
-        ctx.fill();
-      }
 
     } else if (this.type === 'door') {
       if (this.isOpen) {
@@ -255,7 +220,6 @@ export class Building {
         ctx.lineWidth = 1.5;
         ctx.strokeRect(sx - 14, sy - 24, 28, 28);
 
-        // 金のドアノブ
         ctx.fillStyle = '#ffb300';
         ctx.beginPath();
         ctx.arc(sx + 8, sy - 10, 3.5, 0, Math.PI * 2);
@@ -263,14 +227,11 @@ export class Building {
       }
 
     } else if (this.type === 'chest') {
-      // 立体チェスト（蓋と本体）
-      // 本体
       ctx.fillStyle = '#4e342e';
       ctx.beginPath();
       ctx.roundRect(sx - 16, sy - 12, 32, 20, 2);
       ctx.fill();
 
-      // 蓋（斜め上）
       ctx.fillStyle = '#6d4c41';
       ctx.beginPath();
       ctx.roundRect(sx - 16, sy - 18, 32, 10, 2);
@@ -280,20 +241,13 @@ export class Building {
       ctx.lineWidth = 1.5;
       ctx.strokeRect(sx - 16, sy - 12, 32, 20);
 
-      // 金具
       ctx.fillStyle = '#ffc107';
       ctx.fillRect(sx - 4, sy - 10, 8, 8);
-      ctx.fillStyle = '#212121';
-      ctx.beginPath();
-      ctx.arc(sx, sy - 6, 1.8, 0, Math.PI * 2);
-      ctx.fill();
 
     } else if (this.type === 'torch') {
       ctx.fillStyle = '#4e342e';
       ctx.fillRect(sx - 3, sy - 16, 6, 20);
 
-      const fTime = this.animTime * 7;
-      const fH = 10 + Math.sin(fTime) * 3;
       ctx.fillStyle = '#ff5722';
       ctx.beginPath();
       ctx.arc(sx, sy - 16, 6, 0, Math.PI * 2);
@@ -381,6 +335,12 @@ export class Animal {
   render(ctx, camera) {
     const sx = this.x - camera.x;
     const sy = (this.y * PITCH_RATIO) - camera.y;
+
+    // 画面外カリング
+    if (sx < -30 || sx > camera.width + 30 || sy < -40 || sy > camera.height + 30) {
+      return;
+    }
+
     const isMoving = Math.hypot(this.vx, this.vy) > 8;
 
     ctx.save();
@@ -414,10 +374,6 @@ export class Animal {
       ctx.beginPath();
       ctx.ellipse(-1, -15 - hop, 2.5, 6, -0.2, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = '#f8bbd0';
-      ctx.beginPath();
-      ctx.ellipse(-1, -15 - hop, 1.2, 4.5, -0.2, 0, Math.PI * 2);
-      ctx.fill();
 
       ctx.fillStyle = '#111';
       ctx.beginPath();
@@ -437,7 +393,6 @@ export class Animal {
       ctx.ellipse(0, 6, 16, 5, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      // 4本足
       ctx.strokeStyle = '#5d4037';
       ctx.lineWidth = 2.5;
       ctx.beginPath();
@@ -451,10 +406,7 @@ export class Animal {
       ctx.lineTo(10 + legWalk, 6);
       ctx.stroke();
 
-      const bodyGrad = ctx.createLinearGradient(-12, -14, 12, 2);
-      bodyGrad.addColorStop(0, '#a16538');
-      bodyGrad.addColorStop(1, '#7a421f');
-      ctx.fillStyle = bodyGrad;
+      ctx.fillStyle = '#8d4e28';
       ctx.beginPath();
       ctx.ellipse(0, -6, 14, 8, 0, 0, Math.PI * 2);
       ctx.fill();
@@ -466,7 +418,7 @@ export class Animal {
         ctx.fill();
       }
 
-      ctx.fillStyle = '#8d4e28';
+      ctx.fillStyle = '#7a3e1f';
       ctx.beginPath();
       ctx.moveTo(8, -8);
       ctx.lineTo(14, -18);
@@ -530,7 +482,8 @@ export class Enemy {
 
     let avoidFireX = 0;
     let avoidFireY = 0;
-    for (const b of buildings) {
+    for (let i = 0; i < buildings.length; i++) {
+      const b = buildings[i];
       if (b.type === 'campfire') {
         const d = Math.hypot(this.x - b.x, this.y - b.y);
         if (d < 130 && d > 0) {
@@ -554,7 +507,8 @@ export class Enemy {
       let nextY = this.y + vy * dt;
 
       let blocked = false;
-      for (const b of buildings) {
+      for (let i = 0; i < buildings.length; i++) {
+        const b = buildings[i];
         if (b.type === 'wall' || (b.type === 'door' && !b.isOpen)) {
           if (Math.hypot(nextX - b.x, nextY - b.y) < this.radius + b.radius) {
             blocked = true;
@@ -582,6 +536,11 @@ export class Enemy {
   render(ctx, camera) {
     const sx = this.x - camera.x + (this.hitShake > 0 ? (Math.random() - 0.5) * 6 : 0);
     const sy = (this.y * PITCH_RATIO) - camera.y;
+
+    // 画面外カリング
+    if (sx < -30 || sx > camera.width + 30 || sy < -40 || sy > camera.height + 30) {
+      return;
+    }
 
     ctx.save();
     ctx.translate(sx, sy);
@@ -616,15 +575,9 @@ export class Enemy {
       ctx.arc(0, -23 + wobble, 7, 0, Math.PI * 2);
       ctx.fill();
 
-      // 赤く光る目
       ctx.fillStyle = '#ff1744';
       ctx.beginPath();
       ctx.arc(3, -23 + wobble, 1.8, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = 'rgba(255, 23, 68, 0.4)';
-      ctx.beginPath();
-      ctx.arc(3, -23 + wobble, 4, 0, Math.PI * 2);
       ctx.fill();
 
     } else if (this.type === 'wolf') {
@@ -643,29 +596,17 @@ export class Enemy {
       ctx.lineTo(14 + legRun, 5);
       ctx.stroke();
 
-      const wolfGrad = ctx.createLinearGradient(-14, -12, 14, 4);
-      wolfGrad.addColorStop(0, '#455a64');
-      wolfGrad.addColorStop(0.6, '#37474f');
-      wolfGrad.addColorStop(1, '#212121');
-      ctx.fillStyle = wolfGrad;
+      ctx.fillStyle = '#37474f';
       ctx.beginPath();
       ctx.ellipse(0, -6, 15, 7.5, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.fillStyle = '#37474f';
+      ctx.fillStyle = '#263238';
       ctx.beginPath();
       ctx.moveTo(8, -10);
       ctx.lineTo(16, -16);
       ctx.lineTo(21, -9);
       ctx.lineTo(12, -2);
-      ctx.closePath();
-      ctx.fill();
-
-      ctx.fillStyle = '#263238';
-      ctx.beginPath();
-      ctx.moveTo(13, -16);
-      ctx.lineTo(15, -23);
-      ctx.lineTo(17, -15);
       ctx.closePath();
       ctx.fill();
 
@@ -697,13 +638,9 @@ export class Enemy {
       const h = 4;
       const pct = Math.max(0, this.hp / this.maxHp);
       ctx.fillStyle = 'rgba(0,0,0,0.8)';
-      ctx.beginPath();
-      ctx.roundRect(sx - w / 2, sy - this.radius - 24, w, h, 2);
-      ctx.fill();
+      ctx.fillRect(sx - w / 2, sy - this.radius - 24, w, h);
       ctx.fillStyle = '#ff1744';
-      ctx.beginPath();
-      ctx.roundRect(sx - w / 2, sy - this.radius - 24, w * pct, h, 2);
-      ctx.fill();
+      ctx.fillRect(sx - w / 2, sy - this.radius - 24, w * pct, h);
     }
   }
 }
@@ -734,13 +671,10 @@ export class Particle {
     const sx = this.x - camera.x;
     const sy = (this.y * PITCH_RATIO) - camera.y;
 
-    ctx.save();
-    ctx.globalAlpha = Math.max(0, this.life / this.maxLife);
+    if (sx < 0 || sx > camera.width || sy < 0 || sy > camera.height) return;
+
     ctx.fillStyle = this.color;
-    ctx.beginPath();
-    ctx.arc(sx, sy, this.size * 0.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
+    ctx.fillRect(sx, sy, this.size, this.size);
   }
 }
 
@@ -767,13 +701,12 @@ export class PopupText {
     const sx = this.x - camera.x;
     const sy = (this.y * PITCH_RATIO) - camera.y - 20;
 
-    ctx.save();
-    const alpha = Math.min(1, (this.life / this.maxLife) * 1.5);
-    ctx.globalAlpha = alpha;
+    if (sx < 0 || sx > camera.width || sy < 0 || sy > camera.height) return;
 
-    ctx.font = '900 14px "Segoe UI", sans-serif';
+    ctx.save();
+    ctx.font = '900 13px "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
-    ctx.lineWidth = 3.5;
+    ctx.lineWidth = 3;
     ctx.strokeStyle = '#000';
     ctx.strokeText(this.text, sx, sy);
     ctx.fillStyle = this.color;
