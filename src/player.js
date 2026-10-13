@@ -164,7 +164,7 @@ export class Player {
     }
 
     this.isMoving = dx !== 0 || dy !== 0;
-    const isSprinting = input.keys['ShiftLeft'] || input.keys['ShiftRight'];
+    const isSprinting = input.keys['ShiftLeft'] || input.keys['ShiftRight'] || !!input.isSprinting;
 
     let currentSpeed = this.baseSpeed;
     if (this.isMoving && isSprinting && this.stamina > 5) {
@@ -202,9 +202,16 @@ export class Player {
       if (!blockedY && world.isWalkable(this.x, nextY)) {
         this.y += dy * currentSpeed * speedMult * dt;
       }
+
+      // マウス非操作時または移動中は移動方向に自然に向く
+      if (input.isTouchActive || !input.hasMouseMoved) {
+        this.angle = Math.atan2(dy, dx);
+      }
     }
 
-    this.angle = input.mouseWorldAngle;
+    if (!input.isTouchActive && input.hasMouseMoved && input.mouseWorldAngle !== undefined) {
+      this.angle = input.mouseWorldAngle;
+    }
     this.facing = Math.cos(this.angle) >= 0 ? 1 : -1;
 
     if (this.isAttacking) {
