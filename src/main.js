@@ -5,6 +5,7 @@ import { Building, Animal, Enemy, DroppedItem, Particle, PopupText } from './ent
 import { ITEMS, RECIPES } from './items.js';
 import { sound } from './audio.js';
 import { Renderer3D, WORLD_SCALE } from './renderer3d.js';
+import { TouchControls } from './touchControls.js';
 import * as THREE from './vendor/three.module.js';
 
 class Game {
@@ -29,8 +30,14 @@ class Game {
       mouseWorldAngle: 0,
       moveDx: 0,
       moveDy: 0,
-      justPressedWater: false
+      justPressedWater: false,
+      hasMouseMoved: false,
+      isTouchActive: false,
+      isSprinting: false
     };
+
+    // タッチコントロール初期化
+    this.touchControls = new TouchControls(this);
 
     // マウス視点操作
     this.isRightDragging = false;
@@ -177,6 +184,7 @@ class Game {
     });
 
     window.addEventListener('mousemove', (e) => {
+      this.input.hasMouseMoved = true;
       this.input.mouseX = e.clientX;
       this.input.mouseY = e.clientY;
 
@@ -505,9 +513,15 @@ class Game {
         }
       }
 
-      slotDiv.addEventListener('click', () => {
+      const selectSlot = (e) => {
+        if (e) e.stopPropagation();
         this.player.selectedSlot = i;
         this.renderHotbarUI();
+      };
+      slotDiv.addEventListener('click', selectSlot);
+      slotDiv.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        selectSlot(e);
       });
 
       hotbarEl.appendChild(slotDiv);
@@ -705,7 +719,7 @@ class Game {
     this.showToast('新たな命で島に目覚めました！');
   }
 
-  // 二人称（カメラ視点）相対の移動方向計算
+  // 二人称（カメラ視点）相対の移動方向計算（PCキーボード & スマホジョイスティック両対応）
   calculateCameraRelativeMovement() {
     let inputFwd = 0;  // W (+1), S (-1)
     let inputRight = 0; // D (+1), A (-1)
@@ -715,7 +729,15 @@ class Game {
     if (this.input.keys['KeyD'] || this.input.keys['ArrowRight']) inputRight += 1;
     if (this.input.keys['KeyA'] || this.input.keys['ArrowLeft']) inputRight -= 1;
 
-    if (inputFwd === 0 && inputRight === 0) {
+    // タッチジョイスティック入力の取得
+    const touchMove = this.touchControls ? this.touchControls.getMovement() : { dx: 0, dy: 0, isRunning: false };
+    this.input.isTouchActive = this.touchControls && this.touchControls.joystickActive;
+    this.input.isSprinting = touchMove.isRunning;
+
+    const hasKeyInput = (inputFwd !== 0 || inputRight !== 0);
+    const hasTouchInput = (touchMove.dx !== 0 || touchMove.dy !== 0);
+
+    if (!hasKeyInput && !hasTouchInput) {
       this.input.moveDx = 0;
       this.input.moveDy = 0;
       return;
@@ -734,13 +756,97 @@ class Game {
 
     // 合成ベクトル (3Dワールド空間)
     const move = new THREE.Vector3();
-    move.addScaledVector(fwd, inputFwd);
-    move.addScaledVector(right, inputRight);
+
+    if (hasKeyInput) {
+      move.addScaledVector(fwd, inputFwd);
+      move.addScaledVector(right, inputRight);
+    }
+    if (hasTouchInput) {
+      // ジョイスティック: 上倒し(-dy)で前進(fwd)、右倒し(+dx)で右移動(right)
+      move.addScaledVector(fwd, -touchMove.dy);
+      move.addScaledVector(right, touchMove.dx);
+    }
+
     move.normalize();
 
     // 2Dゲーム空間 (x, y) へのマッピング: 3D X -> 2D X, 3D Z -> 2D Y
     this.input.moveDx = move.x;
     this.input.moveDy = move.z;
+  }
+
+  // スマホ・タッチ用アクション実行
+  triggerAction(type) {
+    sound.init();
+    if (this.player.isDead) return;
+
+    if (type === 'attack') {
+      // 照準がない場合でも、プレイヤーの前方をターゲットに設定
+      if (!this.renderer3d.hasGroundIntersection) {
+        const dist = 75;
+        this.input.mouseWorldX = this.player.x + Math.cos(this.player.angle) * dist;
+        this.input.mouseWorldY = this.player.y + Math.sin(this.player.angle) * dist;
+      }
+      this.handleLeftClick();
+    } else if (type === 'use') {
+      // アイテム使用または3D建築設置
+      if (!this.renderer3d.hasGroundIntersection) {
+        const dist = 85;
+        this.input.mouseWorldX = this.player.x + Math.cos(this.player.angle) * dist;
+        this.input.mouseWorldY = this.player.y + Math.sin(this.player.angle) * dist;
+      }
+      this.handleRightClickAction();
+    } else if (type === 'interact') {
+      // ドア・チェストの開閉または水分補給
+      let interacted = false;
+
+      // 近くのドア・チェストを検索
+      for (let i = 0; i < this.entities.buildings.length; i++) {
+        const b = this.entities.buildings[i];
+        const dist = Math.hypot(this.player.x - b.x, this.player.y - b.y);
+        if (dist < 115) {
+          if (b.type === 'door') {
+            b.isOpen = !b.isOpen;
+            sound.build();
+            this.showToast(b.isOpen ? 'ドアを開けました' : 'ドアを閉めました');
+            interacted = true;
+            break;
+          } else if (b.type === 'chest') {
+            this.openChest(b);
+            interacted = true;
+            break;
+          }
+        }
+      }
+
+      if (!interacted) {
+        // 水分補給を試みる
+        const tx = Math.floor(this.player.x / 52);
+        const ty = Math.floor(this.player.y / 52);
+        let nearWater = this.world.isWater(tx, ty);
+        if (!nearWater) {
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              if (this.world.isWater(tx + dx, ty + dy)) {
+                nearWater = true;
+                break;
+              }
+            }
+          }
+        }
+
+        if (nearWater) {
+          if (this.player.thirst < this.player.maxThirst) {
+            this.player.thirst = Math.min(this.player.maxThirst, this.player.thirst + 25);
+            sound.drink();
+            this.showToast('💧 水を飲んで喉を潤しました');
+          } else {
+            this.showToast('喉は渇いていません');
+          }
+        } else {
+          this.showToast('周囲に水場や操作可能な設備がありません');
+        }
+      }
+    }
   }
 
   update(dt) {
