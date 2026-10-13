@@ -16,78 +16,98 @@
 
     <!-- UIオーバーレイ -->
     <div id="ui-layer">
-      <!-- 上部ステータスバー -->
-      <div id="top-bar">
-        <div id="time-display" class="hud-panel">
-          <div id="day-counter">Day 1</div>
-          <div id="clock-display">08:00</div>
-          <div id="sun-moon-icon">☀️</div>
-        </div>
-
-        <!-- 二人称 3D 視点 HUD -->
-        <div id="second-person-hud" class="hud-panel">
-          <div class="sp-title">👁️ 二人称 3D 視点</div>
-          <div class="sp-status">観察者: <span id="camera-target-label">守護精霊 ナビ</span></div>
-          <button id="switch-camera-btn" class="sp-btn" title="視界ジャック切替 [V]">[V] 視界ジャック切替</button>
-        </div>
-
-        <div id="quest-tracker" class="hud-panel">
-          <div class="quest-title">🎯 ガイド目標</div>
-          <div id="quest-text">木を伐採して木材を4個集めよう</div>
-        </div>
-
-        <div id="minimap-container" class="hud-panel">
-          <canvas id="minimapCanvas" width="120" height="120"></canvas>
-        </div>
-      </div>
-
-      <!-- 左下プレイヤーバイタル -->
-      <div id="vitals-panel" class="hud-panel">
-        <div class="vital-row">
-          <span class="vital-icon">❤️</span>
-          <div class="vital-bar-container">
-            <div id="health-bar" class="vital-bar health" style="width: 100%;"></div>
-            <span id="health-text" class="vital-text">100 / 100</span>
+      <!-- 1. ミニマル・トップバー（左：時間・天候、中央：目標、右：二人称視点・ヘルプ・マップ） -->
+      <header id="top-bar">
+        <div class="top-bar-left">
+          <div id="time-display" class="hud-pill">
+            <span id="sun-moon-icon">☀️</span>
+            <span id="day-counter">Day 1</span>
+            <span class="sep">•</span>
+            <span id="clock-display">08:00</span>
           </div>
         </div>
-        <div class="vital-row">
-          <span class="vital-icon">🍖</span>
-          <div class="vital-bar-container">
-            <div id="hunger-bar" class="vital-bar hunger" style="width: 100%;"></div>
-            <span id="hunger-text" class="vital-text">100 / 100</span>
-          </div>
-        </div>
-        <div class="vital-row">
-          <span class="vital-icon">💧</span>
-          <div class="vital-bar-container">
-            <div id="thirst-bar" class="vital-bar thirst" style="width: 100%;"></div>
-            <span id="thirst-text" class="vital-text">100 / 100</span>
-          </div>
-        </div>
-        <div class="vital-row">
-          <span class="vital-icon">⚡</span>
-          <div class="vital-bar-container">
-            <div id="stamina-bar" class="vital-bar stamina" style="width: 100%;"></div>
-            <span id="stamina-text" class="vital-text">100 / 100</span>
-          </div>
-        </div>
-      </div>
 
-      <!-- 下部ホットバー（クイックスロット） -->
-      <div id="bottom-bar">
-        <div id="hotbar" class="hud-panel">
-          <!-- 1〜8スロット -->
+        <div class="top-bar-center">
+          <div id="quest-tracker" class="hud-pill">
+            <span class="quest-icon">🎯</span>
+            <span id="quest-text">木を伐採して木材を4個集めよう</span>
+          </div>
         </div>
-      </div>
 
-      <!-- 右下アクションボタン/ヘルプ -->
-      <div id="help-hint" class="hud-panel">
-        <div>[V] 視界ジャック / 二人称視点切替</div>
-        <div>[右ドラッグ] カメラ視点旋回</div>
-        <div>[WASD] 移動 / [Shift] ダッシュ</div>
-        <div>[左クリック] 攻撃・採取・使用</div>
-        <div>[右クリック] 食べる・3D建築設置</div>
-        <div>[E] インベントリ / クラフト</div>
+        <div class="top-bar-right">
+          <!-- 二人称 3D 視点インジケーター（コンパクトピル型） -->
+          <button id="switch-camera-btn" class="hud-pill clickable-pill" title="視界ジャック切替 [V]">
+            <span class="sp-icon">👁️</span>
+            <span id="camera-target-label">守護精霊 ナビ</span>
+            <span class="key-tag">[V]</span>
+          </button>
+
+          <!-- 操作ヘルプ（トグル式） -->
+          <div class="help-btn-wrapper">
+            <button id="help-toggle-btn" class="hud-pill icon-btn" title="操作ヘルプ">❓</button>
+            <div id="help-hint" class="hud-panel hidden-hint">
+              <div class="hint-title">🕹️ 操作方法</div>
+              <div class="hint-row"><span class="hint-key">WASD</span> 移動</div>
+              <div class="hint-row"><span class="hint-key">Shift</span> ダッシュ</div>
+              <div class="hint-row"><span class="hint-key">右ドラッグ</span> 視点旋回</div>
+              <div class="hint-row"><span class="hint-key">左クリック</span> 攻撃 / 採取</div>
+              <div class="hint-row"><span class="hint-key">右クリック</span> 使用 / 設置</div>
+              <div class="hint-row"><span class="hint-key">E</span> インベントリ</div>
+              <div class="hint-row"><span class="hint-key">V</span> 視界ジャック</div>
+              <div class="hint-row"><span class="hint-key">Space</span> 水分補給</div>
+            </div>
+          </div>
+
+          <!-- ミニマップ -->
+          <div id="minimap-container">
+            <canvas id="minimapCanvas" width="90" height="90"></canvas>
+          </div>
+        </div>
+      </header>
+
+      <!-- 2. 下部HUDゾーン（バイタルとホットバーをコンパクトに統合） -->
+      <div id="bottom-hud-zone">
+        <!-- プレイヤーバイタル（スリムゲージ） -->
+        <div id="vitals-panel">
+          <div class="vital-item" title="体力 (HP)">
+            <span class="vital-icon">❤️</span>
+            <div class="vital-bar-container">
+              <div id="health-bar" class="vital-bar health" style="width: 100%;"></div>
+            </div>
+            <span id="health-text" class="vital-val">100</span>
+          </div>
+
+          <div class="vital-item" title="空腹度">
+            <span class="vital-icon">🍖</span>
+            <div class="vital-bar-container">
+              <div id="hunger-bar" class="vital-bar hunger" style="width: 100%;"></div>
+            </div>
+            <span id="hunger-text" class="vital-val">100</span>
+          </div>
+
+          <div class="vital-item" title="水分">
+            <span class="vital-icon">💧</span>
+            <div class="vital-bar-container">
+              <div id="thirst-bar" class="vital-bar thirst" style="width: 100%;"></div>
+            </div>
+            <span id="thirst-text" class="vital-val">100</span>
+          </div>
+
+          <div class="vital-item" title="スタミナ">
+            <span class="vital-icon">⚡</span>
+            <div class="vital-bar-container">
+              <div id="stamina-bar" class="vital-bar stamina" style="width: 100%;"></div>
+            </div>
+            <span id="stamina-text" class="vital-val">100</span>
+          </div>
+        </div>
+
+        <!-- 下部ホットバー -->
+        <div id="bottom-bar">
+          <div id="hotbar">
+            <!-- 1〜8スロット -->
+          </div>
+        </div>
       </div>
 
       <!-- モバイル/スマホ用オンスクリーン コントロール -->
