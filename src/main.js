@@ -425,6 +425,20 @@ class Game {
       this.switchCameraBtn.addEventListener('click', () => this.toggleVisionJack());
     }
 
+    const helpBtn = document.getElementById('help-toggle-btn');
+    const helpHint = document.getElementById('help-hint');
+    if (helpBtn && helpHint) {
+      helpBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        helpHint.classList.toggle('hidden-hint');
+      });
+      document.addEventListener('click', (e) => {
+        if (!helpHint.contains(e.target) && e.target !== helpBtn) {
+          helpHint.classList.add('hidden-hint');
+        }
+      });
+    }
+
     const tabs = document.querySelectorAll('.tab-btn');
     tabs.forEach(tab => {
       tab.addEventListener('click', () => {
@@ -948,16 +962,16 @@ class Game {
 
   updateHUD() {
     this.healthBar.style.width = `${(this.player.hp / this.player.maxHp) * 100}%`;
-    this.healthText.textContent = `${Math.ceil(this.player.hp)} / ${this.player.maxHp}`;
+    this.healthText.textContent = `${Math.ceil(this.player.hp)}`;
 
     this.hungerBar.style.width = `${(this.player.hunger / this.player.maxHunger) * 100}%`;
-    this.hungerText.textContent = `${Math.ceil(this.player.hunger)} / ${this.player.maxHunger}`;
+    this.hungerText.textContent = `${Math.ceil(this.player.hunger)}`;
 
     this.thirstBar.style.width = `${(this.player.thirst / this.player.maxThirst) * 100}%`;
-    this.thirstText.textContent = `${Math.ceil(this.player.thirst)} / ${this.player.maxThirst}`;
+    this.thirstText.textContent = `${Math.ceil(this.player.thirst)}`;
 
     this.staminaBar.style.width = `${(this.player.stamina / this.player.maxStamina) * 100}%`;
-    this.staminaText.textContent = `${Math.ceil(this.player.stamina)} / ${this.player.maxStamina}`;
+    this.staminaText.textContent = `${Math.ceil(this.player.stamina)}`;
 
     this.dayCounter.textContent = `Day ${this.world.dayCount}`;
     this.clockDisplay.textContent = this.world.getTimeFormatted();
