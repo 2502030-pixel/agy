@@ -348,7 +348,10 @@ export class Renderer3D {
     this.spiritModel.position.copy(this.camera.position).addScaledVector(fwd, 1.8).add(new THREE.Vector3(0.5, -0.3, 0));
     this.spiritModel.lookAt(playerTargetPos);
 
-    // 羽ばたきアニメーション
+    // 羽ばたきアニメーション & リング回転
+    if (this.spiritModel.ring) {
+      this.spiritModel.ring.rotation.z += dt * 2.5;
+    }
     if (this.spiritModel.wing1 && this.spiritModel.wing2) {
       const flap = Math.sin(performance.now() * 0.015) * 0.6;
       this.spiritModel.wing1.rotation.y = Math.PI / 4 + flap;
@@ -437,6 +440,10 @@ export class Renderer3D {
       this.player3D.torchLight.intensity = 0;
     }
 
+    // アイドル時の呼吸
+    const breath = Math.sin(performance.now() * 0.003) * 0.02;
+    this.player3D.bodyGroup.position.y = breath;
+
     // 歩行アニメーション
     if (player.isMoving) {
       player.walkAnimTime += dt * 10;
@@ -447,12 +454,19 @@ export class Renderer3D {
       if (!player.isAttacking) {
         this.player3D.rightArm.rotation.x = swing * 0.8;
       }
+      this.player3D.bodyGroup.position.y = Math.abs(Math.sin(player.walkAnimTime)) * 0.06;
+      if (this.player3D.headGroup) {
+        this.player3D.headGroup.rotation.y = Math.sin(player.walkAnimTime * 0.5) * 0.08;
+      }
     } else {
       this.player3D.leftLeg.rotation.x *= 0.8;
       this.player3D.rightLeg.rotation.x *= 0.8;
       this.player3D.leftArm.rotation.x *= 0.8;
       if (!player.isAttacking) {
         this.player3D.rightArm.rotation.x *= 0.8;
+      }
+      if (this.player3D.headGroup) {
+        this.player3D.headGroup.rotation.y *= 0.8;
       }
     }
 
