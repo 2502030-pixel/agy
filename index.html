@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Island Survival - サバイバルクラフト</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -88,6 +88,31 @@
         <div>[左クリック] 攻撃・採取・使用</div>
         <div>[右クリック] 食べる・3D建築設置</div>
         <div>[E] インベントリ / クラフト</div>
+      </div>
+
+      <!-- モバイル/スマホ用オンスクリーン コントロール -->
+      <div id="mobile-controls" class="hidden">
+        <!-- 左下：バーチャルジョイスティック -->
+        <div id="joystick-zone">
+          <div id="joystick-base">
+            <div id="joystick-stick"></div>
+          </div>
+        </div>
+
+        <!-- 右上：スマホ用インベントリ/クラフト ボタン -->
+        <button id="btn-touch-inventory" class="touch-action-btn bag-btn" title="インベントリ">🎒</button>
+
+        <!-- 右下：アクションボタン群 -->
+        <div id="action-buttons-zone">
+          <!-- 水分補給 / ドア・チェスト操作 -->
+          <button id="btn-touch-action" class="touch-action-btn interact-btn" title="調べる / 飲む">💧</button>
+          <!-- 視界ジャック切替 -->
+          <button id="btn-touch-vision" class="touch-action-btn vision-btn" title="視界ジャック">👁️</button>
+          <!-- アイテム使用 / 建築設置 -->
+          <button id="btn-touch-use" class="touch-action-btn use-btn" title="使用 / 設置">🛠️</button>
+          <!-- 攻撃 / 採掘・伐採 (メインボタン) -->
+          <button id="btn-touch-attack" class="touch-action-btn attack-btn" title="攻撃 / 採取">⚔️</button>
+        </div>
       </div>
     </div>
 
