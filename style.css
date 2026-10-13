@@ -3,6 +3,9 @@
   margin: 0;
   padding: 0;
   user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
@@ -12,6 +15,7 @@ body, html {
   overflow: hidden;
   background-color: #0a0d14;
   color: #f0f4f8;
+  touch-action: none;
 }
 
 #game-container {
@@ -22,6 +26,7 @@ body, html {
   justify-content: center;
   align-items: center;
   overflow: hidden;
+  touch-action: none;
 }
 
 canvas#gameCanvas {
@@ -660,4 +665,312 @@ canvas#gameCanvas {
 
 #vision-jack-overlay.spirit-vision {
   box-shadow: inset 0 0 60px rgba(0, 229, 255, 0.15);
+}
+
+/* ========================================================
+   モバイル・スマホ対応オンスクリーン コントロール
+   ======================================================== */
+#mobile-controls {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 25;
+}
+
+#mobile-controls.hidden {
+  display: none !important;
+}
+
+/* 左下：バーチャルジョイスティックゾーン */
+#joystick-zone {
+  position: absolute;
+  bottom: 24px;
+  left: 20px;
+  width: 140px;
+  height: 140px;
+  pointer-events: auto;
+  touch-action: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#joystick-base {
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(30, 41, 59, 0.78) 0%, rgba(15, 23, 42, 0.92) 100%);
+  border: 2px solid rgba(56, 189, 248, 0.5);
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.25), inset 0 2px 6px rgba(0, 0, 0, 0.6);
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#joystick-base::after {
+  content: '';
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px dashed rgba(255, 255, 255, 0.25);
+}
+
+#joystick-stick {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #38bdf8 0%, #0284c7 100%);
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5), 0 0 12px rgba(56, 189, 248, 0.7);
+  position: absolute;
+  pointer-events: none;
+  transition: transform 0.04s ease-out;
+}
+
+/* 右上：スマホ用インベントリトグルボタン */
+.touch-action-btn.bag-btn {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 50px;
+  height: 50px;
+  font-size: 24px;
+  pointer-events: auto;
+  border: 2px solid rgba(251, 191, 36, 0.6);
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.95));
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4), 0 0 10px rgba(251, 191, 36, 0.3);
+}
+
+/* 右下：アクションボタン群 */
+#action-buttons-zone {
+  position: absolute;
+  bottom: 22px;
+  right: 18px;
+  width: 170px;
+  height: 170px;
+  pointer-events: auto;
+}
+
+.touch-action-btn {
+  position: absolute;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: transform 0.1s ease, filter 0.1s ease, box-shadow 0.1s ease;
+  backdrop-filter: blur(8px);
+}
+
+.touch-action-btn:active, .touch-action-btn.active {
+  transform: scale(0.9) !important;
+  filter: brightness(1.3);
+}
+
+/* メイン攻撃・採掘ボタン */
+.touch-action-btn.attack-btn {
+  bottom: 12px;
+  right: 12px;
+  width: 66px;
+  height: 66px;
+  font-size: 28px;
+  background: radial-gradient(circle, #ef4444 0%, #b91c1c 100%);
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.5), inset 0 2px 4px rgba(255, 255, 255, 0.3);
+}
+
+/* 使用・建築設置ボタン */
+.touch-action-btn.use-btn {
+  bottom: 16px;
+  right: 92px;
+  width: 52px;
+  height: 52px;
+  font-size: 22px;
+  background: radial-gradient(circle, #3b82f6 0%, #1d4ed8 100%);
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 4px 12px rgba(29, 78, 216, 0.4);
+}
+
+/* 調べる / 飲むボタン */
+.touch-action-btn.interact-btn {
+  bottom: 92px;
+  right: 16px;
+  width: 52px;
+  height: 52px;
+  font-size: 22px;
+  background: radial-gradient(circle, #10b981 0%, #047857 100%);
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+/* 視界ジャック切替ボタン */
+.touch-action-btn.vision-btn {
+  bottom: 86px;
+  right: 86px;
+  width: 48px;
+  height: 48px;
+  font-size: 20px;
+  background: radial-gradient(circle, #06b6d4 0%, #0891b2 100%);
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 4px 12px rgba(6, 182, 212, 0.4);
+}
+
+/* ========================================================
+   レスポンシブデザイン（モバイル・スマホ・小型画面）
+   ======================================================== */
+@media (max-width: 900px), (max-height: 550px) {
+  #ui-layer {
+    padding: 10px;
+  }
+
+  /* 上部バーの最適化 */
+  #top-bar {
+    gap: 6px;
+    align-items: flex-start;
+  }
+
+  .hud-panel {
+    padding: 6px 10px;
+    border-radius: 8px;
+  }
+
+  #time-display {
+    gap: 8px;
+    font-size: 13px;
+  }
+
+  #sun-moon-icon {
+    font-size: 16px;
+  }
+
+  #second-person-hud {
+    padding: 4px 8px;
+    gap: 2px;
+  }
+  .sp-title {
+    font-size: 9px;
+  }
+  .sp-status {
+    font-size: 11px;
+  }
+  .sp-btn {
+    display: none; /* スマホではオンスクリーンボタンがあるので非表示 */
+  }
+
+  #quest-tracker {
+    max-width: 180px;
+    border-top: none;
+    border-bottom: 2px solid #ffb300;
+  }
+  .quest-title {
+    font-size: 9px;
+  }
+  #quest-text {
+    font-size: 11px;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #minimap-container {
+    display: none; /* スマホ画面の視界確保のため非表示 */
+  }
+
+  /* バイタルパネルを左上にコンパクト配置 */
+  #vitals-panel {
+    top: 60px;
+    bottom: auto;
+    left: 10px;
+    width: 140px;
+    gap: 4px;
+    background: rgba(14, 18, 26, 0.75);
+    padding: 6px 8px;
+  }
+
+  .vital-row {
+    gap: 6px;
+  }
+
+  .vital-icon {
+    font-size: 12px;
+    width: 16px;
+  }
+
+  .vital-bar-container {
+    height: 12px;
+  }
+
+  .vital-text {
+    font-size: 8.5px;
+  }
+
+  /* 下部ホットバーのスマホ最適化 */
+  #bottom-bar {
+    margin-bottom: 6px;
+  }
+
+  #hotbar {
+    gap: 5px;
+    padding: 6px 8px;
+    max-width: 95vw;
+    overflow-x: auto;
+  }
+
+  .slot {
+    width: 42px;
+    height: 42px;
+    border-radius: 6px;
+  }
+
+  .slot-icon {
+    font-size: 20px;
+  }
+
+  .slot-key {
+    display: none; /* スマホではキー番号非表示 */
+  }
+
+  .slot-count {
+    font-size: 9px;
+    padding: 0 3px;
+  }
+
+  /* PC向けヘルプヒントは非表示 */
+  #help-hint {
+    display: none !important;
+  }
+
+  /* モーダルのレスポンシブ全画面フィット */
+  .modal-content {
+    width: 95vw !important;
+    max-width: 95vw !important;
+    height: 90vh !important;
+    max-height: 90vh !important;
+    padding: 14px !important;
+  }
+
+  .modal-body {
+    flex-direction: column !important;
+    overflow-y: auto !important;
+    gap: 12px !important;
+  }
+
+  .item-grid {
+    grid-template-columns: repeat(6, 1fr) !important;
+    gap: 4px !important;
+  }
+
+  .craft-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 6px !important;
+  }
 }
