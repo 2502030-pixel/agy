@@ -53,6 +53,7 @@ export class Renderer3D {
 
     this.spiritPos = new THREE.Vector3();
     this.spiritModel = createSpiritModel();
+    this.spiritModel.visible = false;
     this.scene.add(this.spiritModel);
 
     // ライティング
@@ -321,8 +322,8 @@ export class Renderer3D {
       return;
     }
 
-    // デフォルト二人称モード：守護精霊ナビの目線からプレイヤーを見下ろす・見つめる
-    this.spiritModel.visible = true;
+    // デフォルト二人称モード：守護精霊ナビの目線からプレイヤーを見下ろす・見つめる（守護精霊モデルは非表示）
+    this.spiritModel.visible = false;
 
     // スムーズなズーム
     this.spiritDistance += (this.targetDistance - this.spiritDistance) * dt * 8.0;
