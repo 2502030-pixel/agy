@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>Island Survival - サバイバルクラフト</title>
-  <link rel="stylesheet" href="style.css?v=20261027_04">
+  <link rel="stylesheet" href="style.css?v=20261027_05">
 </head>
 <body>
   <div id="game-container">
@@ -155,12 +155,20 @@
             </div>
           </div>
           <div class="craft-section">
-            <h3>🔨 クラフトレシピ <span id="workbench-indicator" class="badge">基本作業</span></h3>
+            <div class="craft-header-row">
+              <h3>🔨 クラフトレシピ <span id="workbench-indicator" class="badge">基本作業</span></h3>
+              <button id="filter-craftable-btn" class="filter-toggle-btn" title="作成可能なレシピのみ表示">✨ 作れるもの</button>
+            </div>
             <div id="crafting-categories" class="tab-bar">
               <button class="tab-btn active" data-cat="all">すべて</button>
               <button class="tab-btn" data-cat="tools">道具・武器</button>
               <button class="tab-btn" data-cat="build">建築・家具</button>
               <button class="tab-btn" data-cat="survival">サバイバル</button>
+            </div>
+            <!-- 素材フィルター表示バー -->
+            <div id="material-filter-banner" class="material-filter-banner hidden">
+              <span id="material-filter-text">🪵 木材で作れるレシピ</span>
+              <button id="clear-material-filter-btn" class="clear-filter-btn" title="フィルター解除">✕ 解除</button>
             </div>
             <div id="crafting-list" class="craft-grid"></div>
             <div id="crafting-preview" class="craft-preview-box"></div>
@@ -204,6 +212,6 @@
   </div>
 
   <!-- スクリプトの読み込み -->
-  <script type="module" src="src/main.js?v=20261027_04"></script>
+  <script type="module" src="src/main.js?v=20261027_05"></script>
 </body>
 </html>

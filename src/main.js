@@ -453,6 +453,12 @@ class Game {
       });
     }
 
+    this.selectedCraftCat = 'all';
+    this.selectedMaterialFilter = null;
+    this.filterOnlyCraftable = false;
+    this.selectedRecipeId = null;
+    this.selectedInventorySlot = null;
+
     const tabs = document.querySelectorAll('.tab-btn');
     tabs.forEach(tab => {
       tab.addEventListener('click', () => {
@@ -462,6 +468,22 @@ class Game {
         this.renderCraftingUI();
       });
     });
+
+    const craftableBtn = document.getElementById('filter-craftable-btn');
+    if (craftableBtn) {
+      craftableBtn.addEventListener('click', () => {
+        this.filterOnlyCraftable = !this.filterOnlyCraftable;
+        craftableBtn.classList.toggle('active', this.filterOnlyCraftable);
+        this.renderCraftingUI();
+      });
+    }
+
+    const clearFilterBtn = document.getElementById('clear-material-filter-btn');
+    if (clearFilterBtn) {
+      clearFilterBtn.addEventListener('click', () => {
+        this.clearMaterialFilter();
+      });
+    }
   }
 
   toggleInventory(forced = null) {
@@ -564,7 +586,7 @@ class Game {
     this.player.inventory.forEach((slot, idx) => {
       if (slot) count++;
       const slotDiv = document.createElement('div');
-      slotDiv.className = 'slot';
+      slotDiv.className = `slot ${idx === this.selectedInventorySlot ? 'selected-slot' : ''}`;
       slotDiv.dataset.index = idx;
 
       if (slot) {
@@ -574,7 +596,19 @@ class Game {
           ${slot.count > 1 ? `<span class="slot-count">${slot.count}</span>` : ''}
         `;
         slotDiv.addEventListener('click', () => {
+          this.selectedInventorySlot = idx;
+          grid.querySelectorAll('.slot').forEach(s => s.classList.remove('selected-slot'));
+          slotDiv.classList.add('selected-slot');
           this.showItemInfo(itemDef, slot);
+          this.setMaterialFilter(itemDef.id);
+        });
+      } else {
+        slotDiv.addEventListener('click', () => {
+          this.selectedInventorySlot = null;
+          grid.querySelectorAll('.slot').forEach(s => s.classList.remove('selected-slot'));
+          this.clearMaterialFilter();
+          const infoBox = document.getElementById('selected-item-info');
+          infoBox.innerHTML = 'アイテムをクリックすると詳細が表示されます';
         });
       }
       grid.appendChild(slotDiv);
@@ -583,18 +617,86 @@ class Game {
     document.getElementById('inv-count').textContent = `${count}`;
   }
 
+  setMaterialFilter(matId) {
+    this.selectedMaterialFilter = matId;
+    const banner = document.getElementById('material-filter-banner');
+    const textEl = document.getElementById('material-filter-text');
+    const itemDef = ITEMS[matId];
+
+    if (banner && textEl && itemDef) {
+      // この素材で作れるレシピ数をカウント
+      const matchingRecipes = RECIPES.filter(r => r.ingredients && r.ingredients.some(ing => ing.id === matId));
+      if (matchingRecipes.length > 0) {
+        banner.classList.remove('hidden');
+        textEl.innerHTML = `🔍 <strong>${itemDef.icon} [${itemDef.name}]</strong> で作れるレシピ (${matchingRecipes.length}件)`;
+      } else {
+        banner.classList.remove('hidden');
+        textEl.innerHTML = `🔍 <strong>${itemDef.icon} [${itemDef.name}]</strong> を使うレシピはありません`;
+      }
+    }
+    this.renderCraftingUI();
+  }
+
+  clearMaterialFilter() {
+    this.selectedMaterialFilter = null;
+    const banner = document.getElementById('material-filter-banner');
+    if (banner) {
+      banner.classList.add('hidden');
+    }
+    this.renderCraftingUI();
+  }
+
   showItemInfo(itemDef, slot) {
     const infoBox = document.getElementById('selected-item-info');
+    
+    // この素材を材料として使うレシピを全検索
+    const usableInRecipes = RECIPES.filter(r => r.ingredients && r.ingredients.some(ing => ing.id === itemDef.id));
+    
+    let recipesChipsHtml = '';
+    if (usableInRecipes.length > 0) {
+      recipesChipsHtml = `
+        <div class="craftable-products-title">🔨 この素材で作れるアイテム (タップで絞り込み):</div>
+        <div class="craftable-products-list">
+          ${usableInRecipes.map(r => {
+            const resId = typeof r.result === 'string' ? r.result : (r.result && r.result.id);
+            const resItem = ITEMS[resId];
+            if (!resItem) return '';
+            const canCraft = this.player.hasIngredients(r.ingredients);
+            return `
+              <span class="crafted-from-chip ${canCraft ? 'can-craft' : ''}" data-recipe-id="${r.id}" title="${resItem.name}">
+                ${resItem.icon} ${resItem.name}
+              </span>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
     infoBox.innerHTML = `
-      <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
         <span style="font-size:24px;">${itemDef.icon}</span>
-        <strong>${itemDef.name}</strong>
+        <div>
+          <strong style="color:#f8fafc; font-size:14px;">${itemDef.name}</strong>
+          <span style="font-size:11px; color:#94a3b8; margin-left:8px;">所持数: ${slot ? slot.count : 1} / スタック: ${itemDef.maxStack}</span>
+        </div>
       </div>
-      <p style="margin:0 0 6px 0; color:#cbd5e1;">${itemDef.desc}</p>
-      <div style="font-size:11.5px; color:#94a3b8;">
-        スタック上限: ${itemDef.maxStack} | 個数: ${slot ? slot.count : 1}
-      </div>
+      <p style="margin:0 0 6px 0; color:#cbd5e1; font-size:11.5px; line-height:1.4;">${itemDef.description || itemDef.desc || ''}</p>
+      ${recipesChipsHtml}
     `;
+
+    // チップをクリックしたときにそのレシピにジャンプ＆選択
+    infoBox.querySelectorAll('.crafted-from-chip').forEach(chip => {
+      chip.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const rId = chip.getAttribute('data-recipe-id');
+        this.selectRecipe(rId);
+      });
+    });
+  }
+
+  selectRecipe(recipeId) {
+    this.selectedRecipeId = recipeId;
+    this.renderCraftingUI();
   }
 
   renderCraftingUI() {
@@ -605,80 +707,213 @@ class Game {
     const isNearCampfire = this.entities.buildings.some(b => b.type === 'campfire' && Math.hypot(this.player.x - b.x, this.player.y - b.y) < 130);
 
     const indicator = document.getElementById('workbench-indicator');
-    if (isNearWorkbench) {
-      indicator.textContent = '作業台あり';
-      indicator.style.background = '#059669';
-    } else {
-      indicator.textContent = '基本作業';
-      indicator.style.background = '#2563eb';
+    if (indicator) {
+      if (isNearWorkbench) {
+        indicator.textContent = '作業台あり';
+        indicator.style.background = '#059669';
+      } else {
+        indicator.textContent = '基本作業';
+        indicator.style.background = '#2563eb';
+      }
     }
 
+    // フィルタリング処理
     const recipes = RECIPES.filter(r => {
-      if (this.selectedCraftCat !== 'all' && r.category !== this.selectedCraftCat) return false;
+      // 1. 素材フィルター
+      if (this.selectedMaterialFilter) {
+        const hasMat = r.ingredients && r.ingredients.some(ing => ing.id === this.selectedMaterialFilter);
+        if (!hasMat) return false;
+      } else {
+        // 通常のカテゴリフィルター（素材フィルター適用時は全カテゴリ横断で表示）
+        if (this.selectedCraftCat !== 'all' && r.category !== this.selectedCraftCat) return false;
+      }
+
+      // 2. 作成可能のみフィルター
+      if (this.filterOnlyCraftable) {
+        const reqWorkbench = !!(r.requiresWorkbench || r.needWorkbench);
+        const reqCampfire = !!(r.requiresCampfire || r.needCampfire);
+        const canReq = (!reqWorkbench || isNearWorkbench) && (!reqCampfire || isNearCampfire);
+        const hasMats = this.player.hasIngredients(r.ingredients);
+        if (!canReq || !hasMats) return false;
+      }
+
       return true;
     });
 
+    if (recipes.length === 0) {
+      listEl.innerHTML = `
+        <div style="grid-column: 1 / -1; padding: 24px; text-align: center; color: #94a3b8; font-size: 13px;">
+          該当するレシピはありません。<br>
+          ${this.selectedMaterialFilter ? '<button id="btn-reset-filter" class="clear-filter-btn" style="margin-top:8px;">すべてのレシピを表示する</button>' : ''}
+        </div>
+      `;
+      const resetBtn = document.getElementById('btn-reset-filter');
+      if (resetBtn) {
+        resetBtn.addEventListener('click', () => this.clearMaterialFilter());
+      }
+      this.renderCraftingPreview(null);
+      return;
+    }
+
+    // デフォルトで現在選択中がなければ先頭レシピを選択
+    if (!this.selectedRecipeId || !recipes.some(r => r.id === this.selectedRecipeId)) {
+      this.selectedRecipeId = recipes[0].id;
+    }
+
+    let activeRecipe = null;
+
     recipes.forEach(r => {
-      const targetItem = ITEMS[r.result.id];
-      const canMakeRequirement = (!r.needWorkbench || isNearWorkbench) && (!r.needCampfire || isNearCampfire);
+      const resultId = typeof r.result === 'string' ? r.result : (r.result && r.result.id);
+      const resultCount = typeof r.result === 'object' && r.result.count ? r.result.count : (r.count || 1);
+      const targetItem = ITEMS[resultId];
+      if (!targetItem) return;
+
+      const reqWorkbench = !!(r.requiresWorkbench || r.needWorkbench);
+      const reqCampfire = !!(r.requiresCampfire || r.needCampfire);
+      const canMakeRequirement = (!reqWorkbench || isNearWorkbench) && (!reqCampfire || isNearCampfire);
       const hasMats = this.player.hasIngredients(r.ingredients);
       const canCraft = canMakeRequirement && hasMats;
+      const isSelected = r.id === this.selectedRecipeId;
+
+      if (isSelected) {
+        activeRecipe = { ...r, resultId, resultCount, targetItem, canMakeRequirement, hasMats, canCraft, reqWorkbench, reqCampfire };
+      }
 
       const card = document.createElement('div');
-      card.className = `craft-card ${canCraft ? 'can-craft' : 'cannot-craft'}`;
+      card.className = `craft-card ${canCraft ? 'can-craft' : 'cannot-craft'} ${isSelected ? 'selected-recipe' : ''}`;
 
       let ingHtml = r.ingredients.map(ing => {
         const item = ITEMS[ing.id];
         const has = this.countPlayerItem(ing.id);
         const ok = has >= ing.count;
-        return `<span style="color:${ok ? '#81c784' : '#e57373'}">${item.name} x${ing.count} (${has})</span>`;
-      }).join(', ');
+        return `<span class="mat-chip ${ok ? 'ok' : 'lack'}">${item ? item.icon : ''} ${item ? item.name : ing.id} ${has}/${ing.count}</span>`;
+      }).join('');
 
-      let reqText = '';
-      if (r.needWorkbench) reqText = ' [要:作業台]';
-      if (r.needCampfire) reqText = ' [要:焚き火]';
+      let statusBadge = '';
+      if (canCraft) {
+        statusBadge = '<span style="font-size:10px; color:#34d399; font-weight:700;">✨作成可</span>';
+      } else if (!canMakeRequirement) {
+        statusBadge = `<span style="font-size:10px; color:#fbbf24; font-weight:700;">⚠️${reqWorkbench ? '要:作業台' : '要:焚き火'}</span>`;
+      } else {
+        statusBadge = '<span style="font-size:10px; color:#f87171;">❌素材不足</span>';
+      }
 
       card.innerHTML = `
-        <div style="font-size:26px;">${targetItem.icon}</div>
+        <div class="craft-card-icon">${targetItem.icon}</div>
         <div class="craft-details">
-          <div class="craft-name">${targetItem.name} ${r.result.count > 1 ? `x${r.result.count}` : ''} <span style="font-size:10px; color:#ffb74d;">${reqText}</span></div>
+          <div class="craft-name">
+            <span>${targetItem.name}${resultCount > 1 ? ` x${resultCount}` : ''}</span>
+            ${statusBadge}
+          </div>
           <div class="craft-mats">${ingHtml}</div>
         </div>
       `;
 
       card.addEventListener('click', () => {
-        if (!canMakeRequirement) {
-          this.showToast(r.needWorkbench ? '作業台の近くで作成してください' : '焚き火の近くで作成してください');
-          return;
-        }
-        if (!hasMats) {
-          this.showToast('素材が足りません');
-          return;
-        }
-
-        r.ingredients.forEach(req => {
-          let toRemove = req.count;
-          for (let i = 0; i < this.player.inventory.length; i++) {
-            const slot = this.player.inventory[i];
-            if (slot && slot.id === req.id) {
-              const take = Math.min(toRemove, slot.count);
-              this.player.removeItem(i, take);
-              toRemove -= take;
-              if (toRemove <= 0) break;
-            }
-          }
-        });
-
-        this.player.addItem(r.result.id, r.result.count);
-        sound.craft();
-        this.showToast(`🔨 ${targetItem.name} をクラフトしました！`);
+        this.selectedRecipeId = r.id;
         this.renderCraftingUI();
-        this.renderInventoryModal();
-        this.renderHotbarUI();
       });
 
       listEl.appendChild(card);
     });
+
+    this.renderCraftingPreview(activeRecipe);
+  }
+
+  renderCraftingPreview(recipeData) {
+    const previewEl = document.getElementById('crafting-preview');
+    if (!previewEl) return;
+
+    if (!recipeData) {
+      previewEl.innerHTML = '<div style="color:#64748b; font-size:12px; text-align:center; padding:12px;">レシピを選択してください</div>';
+      return;
+    }
+
+    const { r, targetItem, resultCount, canMakeRequirement, hasMats, canCraft, reqWorkbench, reqCampfire } = recipeData;
+
+    let reqLabel = '<span style="color:#38bdf8;">手元で作成可能</span>';
+    if (reqWorkbench) reqLabel = canMakeRequirement ? '<span style="color:#34d399;">✅ 作業台の設備あり</span>' : '<span style="color:#fbbf24;">⚠️ 作業台の近くが必要です</span>';
+    if (reqCampfire) reqLabel = canMakeRequirement ? '<span style="color:#34d399;">✅ 焚き火の設備あり</span>' : '<span style="color:#fbbf24;">⚠️ 焚き火の近くが必要です</span>';
+
+    const matsListHtml = recipeData.ingredients.map(ing => {
+      const item = ITEMS[ing.id];
+      const has = this.countPlayerItem(ing.id);
+      const ok = has >= ing.count;
+      return `
+        <span class="mat-chip ${ok ? 'ok' : 'lack'}" style="font-size:11.5px; padding:2px 8px; cursor:pointer;" data-mat-id="${ing.id}" title="クリックしてこの素材で作れるものを表示">
+          ${item ? item.icon : ''} ${item ? item.name : ing.id}: <strong>${has}/${ing.count}</strong>
+        </span>
+      `;
+    }).join('');
+
+    previewEl.innerHTML = `
+      <div class="preview-header">
+        <span class="preview-icon">${targetItem.icon}</span>
+        <div class="preview-title-col">
+          <div class="preview-name">${targetItem.name}${resultCount > 1 ? ` x${resultCount}` : ''} <span style="font-size:11px; margin-left:8px;">${reqLabel}</span></div>
+          <div class="preview-desc">${targetItem.description || targetItem.desc || ''}</div>
+        </div>
+      </div>
+      <div class="preview-action-row">
+        <div class="preview-mats-list">
+          ${matsListHtml}
+        </div>
+        <button id="btn-do-craft" class="btn-craft-action" ${canCraft ? '' : 'disabled'}>
+          🔨 クラフトする
+        </button>
+      </div>
+    `;
+
+    // プレビューの素材チップをクリックしたときも素材フィルターを起動
+    previewEl.querySelectorAll('.mat-chip').forEach(chip => {
+      chip.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const matId = chip.getAttribute('data-mat-id');
+        if (matId && ITEMS[matId]) {
+          this.setMaterialFilter(matId);
+        }
+      });
+    });
+
+    const craftBtn = document.getElementById('btn-do-craft');
+    if (craftBtn && canCraft) {
+      craftBtn.addEventListener('click', () => {
+        this.executeCraft(recipeData);
+      });
+    }
+  }
+
+  executeCraft(recipeData) {
+    const { targetItem, resultId, resultCount, ingredients, canMakeRequirement, hasMats } = recipeData;
+
+    if (!canMakeRequirement) {
+      this.showToast(recipeData.reqWorkbench ? '作業台の近くで作成してください' : '焚き火の近くで作成してください');
+      return;
+    }
+    if (!hasMats) {
+      this.showToast('素材が足りません');
+      return;
+    }
+
+    ingredients.forEach(req => {
+      let toRemove = req.count;
+      for (let i = 0; i < this.player.inventory.length; i++) {
+        const slot = this.player.inventory[i];
+        if (slot && slot.id === req.id) {
+          const take = Math.min(toRemove, slot.count);
+          this.player.removeItem(i, take);
+          toRemove -= take;
+          if (toRemove <= 0) break;
+        }
+      }
+    });
+
+    this.player.addItem(resultId, resultCount);
+    sound.craft();
+    this.showToast(`🔨 ${targetItem.name} をクラフトしました！`);
+    this.renderCraftingUI();
+    this.renderInventoryModal();
+    this.renderHotbarUI();
   }
 
   renderChestModal() {
