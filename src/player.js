@@ -181,75 +181,72 @@ export class Player {
       dx /= len;
       dy /= len;
 
-      const nextX = this.x + dx * currentSpeed * dt;
-      const nextY = this.y + dy * currentSpeed * dt;
-
-      let blockedX = false;
-      let blockedY = false;
-      for (const b of buildings) {
-        if (b.type === 'wall' || (b.type === 'door' && !b.isOpen)) {
-          const totalRadius = this.radius + b.radius;
-          const curDistSq = (this.x - b.x) ** 2 + (this.y - b.y) ** 2;
-
-          if (!blockedX) {
-            const nextXDistSq = (nextX - b.x) ** 2 + (this.y - b.y) ** 2;
-            if (nextXDistSq < totalRadius * totalRadius) {
-              if (nextXDistSq < curDistSq || curDistSq >= totalRadius * totalRadius) {
-                blockedX = true;
-              }
-            }
-          }
-
-          if (!blockedY) {
-            const nextYDistSq = (this.x - b.x) ** 2 + (nextY - b.y) ** 2;
-            if (nextYDistSq < totalRadius * totalRadius) {
-              if (nextYDistSq < curDistSq || curDistSq >= totalRadius * totalRadius) {
-                blockedY = true;
-              }
-            }
-          }
-        }
-      }
-
-      // 木や石などの自然オブジェクトの当たり判定
-      if (world && world.resources) {
-        for (const res of world.resources) {
-          if (res.hp <= 0) continue;
-          if (res.type === 'tree' || res.type === 'rock' || res.type === 'iron_rock') {
-            const resRadius = res.type === 'tree' ? 16 : (res.type === 'iron_rock' ? 20 : 18);
-            const totalRadius = this.radius + resRadius;
-            const curDistSq = (this.x - res.x) ** 2 + (this.y - res.y) ** 2;
-
-            if (!blockedX) {
-              const nextXDistSq = (nextX - res.x) ** 2 + (this.y - res.y) ** 2;
-              if (nextXDistSq < totalRadius * totalRadius) {
-                if (nextXDistSq < curDistSq || curDistSq >= totalRadius * totalRadius) {
-                  blockedX = true;
-                }
-              }
-            }
-
-            if (!blockedY) {
-              const nextYDistSq = (this.x - res.x) ** 2 + (nextY - res.y) ** 2;
-              if (nextYDistSq < totalRadius * totalRadius) {
-                if (nextYDistSq < curDistSq || curDistSq >= totalRadius * totalRadius) {
-                  blockedY = true;
-                }
-              }
-            }
-          }
-        }
-      }
-
       const inWater = world.isWater(Math.floor(this.x / 52), Math.floor(this.y / 52));
       const speedMult = inWater ? 0.6 : 1.0;
 
-      if (!blockedX && world.isWalkable(nextX, this.y)) {
-        this.x += dx * currentSpeed * speedMult * dt;
+      const stepX = dx * currentSpeed * speedMult * dt;
+      const stepY = dy * currentSpeed * speedMult * dt;
+
+      // 移動を適用
+      const prevX = this.x;
+      const prevY = this.y;
+
+      if (world.isWalkable(this.x + stepX, this.y)) {
+        this.x += stepX;
       }
-      if (!blockedY && world.isWalkable(this.x, nextY)) {
-        this.y += dy * currentSpeed * speedMult * dt;
+      if (world.isWalkable(this.x, this.y + stepY)) {
+        this.y += stepY;
       }
+
+      // 木・石（岩・鉄鉱脈）などの自然オブジェクトの当たり判定と押し出し解決
+      if (world && world.resources) {
+        for (let iter = 0; iter < 3; iter++) {
+          for (let i = 0; i < world.resources.length; i++) {
+            const res = world.resources[i];
+            if (res.hp <= 0) continue;
+            if (res.type === 'tree' || res.type === 'rock' || res.type === 'iron_rock') {
+              const resRadius = res.type === 'tree' ? 24 : (res.type === 'iron_rock' ? 24 : 22);
+              const totalRadius = this.radius + resRadius;
+              const distX = this.x - res.x;
+              const distY = this.y - res.y;
+              const dist = Math.hypot(distX, distY);
+
+              if (dist < totalRadius && dist > 0.0001) {
+                const push = totalRadius - dist;
+                this.x += (distX / dist) * push;
+                this.y += (distY / dist) * push;
+              }
+            }
+          }
+        }
+      }
+
+      // 建築物（壁・閉じた扉）の当たり判定と押し出し解決
+      if (buildings) {
+        for (let iter = 0; iter < 3; iter++) {
+          for (let i = 0; i < buildings.length; i++) {
+            const b = buildings[i];
+            if (b.type === 'wall' || (b.type === 'door' && !b.isOpen)) {
+              const totalRadius = this.radius + b.radius;
+              const distX = this.x - b.x;
+              const distY = this.y - b.y;
+              const dist = Math.hypot(distX, distY);
+
+              if (dist < totalRadius && dist > 0.0001) {
+                const push = totalRadius - dist;
+                this.x += (distX / dist) * push;
+                this.y += (distY / dist) * push;
+              }
+            }
+          }
+        }
+      }
+
+      // マップ外周境界チェック
+      const mapPadding = 30;
+      const maxBound = (world.width || 60) * 52 - mapPadding;
+      this.x = Math.max(mapPadding, Math.min(maxBound, this.x));
+      this.y = Math.max(mapPadding, Math.min(maxBound, this.y));
 
       // マウス非操作時または移動中は移動方向に自然に向く
       if (input.isTouchActive || !input.hasMouseMoved) {

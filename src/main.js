@@ -1,6 +1,6 @@
 // 二人称（Second-Person）3D サバイバルクラフト メインゲームエンジン
 import { World, TILE_SIZE } from './world.js';
-import { Player } from './player.js';
+import { Player } from './player.js?v=20261027_04';
 import { Building, Animal, Enemy, DroppedItem, Particle, PopupText } from './entities.js';
 import { ITEMS, RECIPES } from './items.js';
 import { sound } from './audio.js';
