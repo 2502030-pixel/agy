@@ -323,7 +323,22 @@ export class Animal {
     const nextX = this.x + this.vx * dt;
     const nextY = this.y + this.vy * dt;
 
-    if (world.isWalkable(nextX, nextY)) {
+    let blocked = false;
+    if (world.resources) {
+      for (let i = 0; i < world.resources.length; i++) {
+        const res = world.resources[i];
+        if (res.hp <= 0) continue;
+        if (res.type === 'tree' || res.type === 'rock' || res.type === 'iron_rock') {
+          const resRadius = res.type === 'tree' ? 16 : 18;
+          if (Math.hypot(nextX - res.x, nextY - res.y) < this.radius + resRadius) {
+            blocked = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!blocked && world.isWalkable(nextX, nextY)) {
       this.x = nextX;
       this.y = nextY;
     } else {
@@ -517,6 +532,20 @@ export class Enemy {
               this.attackCooldown = 1.1;
             }
             break;
+          }
+        }
+      }
+
+      if (!blocked && world.resources) {
+        for (let i = 0; i < world.resources.length; i++) {
+          const res = world.resources[i];
+          if (res.hp <= 0) continue;
+          if (res.type === 'tree' || res.type === 'rock' || res.type === 'iron_rock') {
+            const resRadius = res.type === 'tree' ? 16 : 18;
+            if (Math.hypot(nextX - res.x, nextY - res.y) < this.radius + resRadius) {
+              blocked = true;
+              break;
+            }
           }
         }
       }

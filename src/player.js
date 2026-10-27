@@ -188,8 +188,56 @@ export class Player {
       let blockedY = false;
       for (const b of buildings) {
         if (b.type === 'wall' || (b.type === 'door' && !b.isOpen)) {
-          if (Math.hypot(nextX - b.x, this.y - b.y) < this.radius + b.radius) blockedX = true;
-          if (Math.hypot(this.x - b.x, nextY - b.y) < this.radius + b.radius) blockedY = true;
+          const totalRadius = this.radius + b.radius;
+          const curDistSq = (this.x - b.x) ** 2 + (this.y - b.y) ** 2;
+
+          if (!blockedX) {
+            const nextXDistSq = (nextX - b.x) ** 2 + (this.y - b.y) ** 2;
+            if (nextXDistSq < totalRadius * totalRadius) {
+              if (nextXDistSq < curDistSq || curDistSq >= totalRadius * totalRadius) {
+                blockedX = true;
+              }
+            }
+          }
+
+          if (!blockedY) {
+            const nextYDistSq = (this.x - b.x) ** 2 + (nextY - b.y) ** 2;
+            if (nextYDistSq < totalRadius * totalRadius) {
+              if (nextYDistSq < curDistSq || curDistSq >= totalRadius * totalRadius) {
+                blockedY = true;
+              }
+            }
+          }
+        }
+      }
+
+      // 木や石などの自然オブジェクトの当たり判定
+      if (world && world.resources) {
+        for (const res of world.resources) {
+          if (res.hp <= 0) continue;
+          if (res.type === 'tree' || res.type === 'rock' || res.type === 'iron_rock') {
+            const resRadius = res.type === 'tree' ? 16 : (res.type === 'iron_rock' ? 20 : 18);
+            const totalRadius = this.radius + resRadius;
+            const curDistSq = (this.x - res.x) ** 2 + (this.y - res.y) ** 2;
+
+            if (!blockedX) {
+              const nextXDistSq = (nextX - res.x) ** 2 + (this.y - res.y) ** 2;
+              if (nextXDistSq < totalRadius * totalRadius) {
+                if (nextXDistSq < curDistSq || curDistSq >= totalRadius * totalRadius) {
+                  blockedX = true;
+                }
+              }
+            }
+
+            if (!blockedY) {
+              const nextYDistSq = (this.x - res.x) ** 2 + (nextY - res.y) ** 2;
+              if (nextYDistSq < totalRadius * totalRadius) {
+                if (nextYDistSq < curDistSq || curDistSq >= totalRadius * totalRadius) {
+                  blockedY = true;
+                }
+              }
+            }
+          }
         }
       }
 

@@ -364,6 +364,20 @@ class Game {
           }
         }
 
+        if (!blocked && this.world.resources) {
+          for (let i = 0; i < this.world.resources.length; i++) {
+            const res = this.world.resources[i];
+            if (res.hp <= 0) continue;
+            if (res.type === 'tree' || res.type === 'rock' || res.type === 'iron_rock') {
+              const resRadius = res.type === 'tree' ? 16 : 18;
+              if (Math.hypot(placeX - res.x, placeY - res.y) < resRadius + 18) {
+                blocked = true;
+                break;
+              }
+            }
+          }
+        }
+
         if (!blocked) {
           this.entities.buildings.push(new Building(def.placeType, placeX, placeY));
           this.player.removeItem(this.player.selectedSlot, 1);
