@@ -52,9 +52,7 @@ export class Renderer3D {
     this.spiritHeightOffset = 4.5;
 
     this.spiritPos = new THREE.Vector3();
-    this.spiritModel = createSpiritModel();
-    this.spiritModel.visible = false;
-    this.scene.add(this.spiritModel);
+    this.spiritModel = new THREE.Group();
 
     // ライティング
     this.initLighting();
@@ -342,22 +340,6 @@ export class Renderer3D {
     // スムーズなカメラ追従
     this.camera.position.lerp(new THREE.Vector3(targetCamX, targetCamY, targetCamZ), dt * 9.0);
     this.camera.lookAt(playerTargetPos);
-
-    // 守護精霊モデルはカメラの少し前方・斜めに舞う
-    const fwd = new THREE.Vector3();
-    this.camera.getWorldDirection(fwd);
-    this.spiritModel.position.copy(this.camera.position).addScaledVector(fwd, 1.8).add(new THREE.Vector3(0.5, -0.3, 0));
-    this.spiritModel.lookAt(playerTargetPos);
-
-    // 羽ばたきアニメーション & リング回転
-    if (this.spiritModel.ring) {
-      this.spiritModel.ring.rotation.z += dt * 2.5;
-    }
-    if (this.spiritModel.wing1 && this.spiritModel.wing2) {
-      const flap = Math.sin(performance.now() * 0.015) * 0.6;
-      this.spiritModel.wing1.rotation.y = Math.PI / 4 + flap;
-      this.spiritModel.wing2.rotation.y = -Math.PI / 4 - flap;
-    }
   }
 
   // 二人称カメラモード切替（[V]キー押下時など）

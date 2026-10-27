@@ -1037,45 +1037,9 @@ export function createEnemyModel(type) {
   return group;
 }
 
-// 観察者（守護精霊 ナビ）3D モデル
+// 観察者（守護精霊 ナビ）3D モデル - 削除済み（非表示・空グループ）
 export function createSpiritModel() {
   const group = new THREE.Group();
-
-  // クリスタルコア（多面体＋グロー）
-  const coreGeom = new THREE.OctahedronGeometry(0.34, 1);
-  const core = new THREE.Mesh(coreGeom, materials.spiritCore);
-  group.add(core);
-
-  // 周回する魔法のリング
-  const ringGeom = new THREE.TorusGeometry(0.55, 0.02, 6, 24);
-  const ring = new THREE.Mesh(ringGeom, materials.spiritRing);
-  ring.rotation.x = Math.PI / 3;
-  group.add(ring);
-  group.ring = ring;
-
-  // クリスタルウィング
-  const wingGeom = new THREE.BufferGeometry();
-  const vertices = new Float32Array([
-    0, 0, 0,
-    -0.5, 0.4, 0,
-    -0.2, -0.4, 0
-  ]);
-  wingGeom.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
-  wingGeom.computeVertexNormals();
-
-  const wing1 = new THREE.Mesh(wingGeom, materials.spiritWing);
-  wing1.position.set(-0.15, 0.05, -0.05);
-  const wing2 = new THREE.Mesh(wingGeom, materials.spiritWing);
-  wing2.position.set(0.15, 0.05, -0.05);
-  wing2.scale.set(-1, 1, 1);
-  group.add(wing1, wing2);
-  group.wing1 = wing1;
-  group.wing2 = wing2;
-
-  // 神秘的な青白いポイントライト
-  const light = new THREE.PointLight(0x38bdf8, 1.8, 12, 1.8);
-  group.add(light);
-
   return group;
 }
 
