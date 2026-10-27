@@ -4,7 +4,7 @@ import { Player } from './player.js';
 import { Building, Animal, Enemy, DroppedItem, Particle, PopupText } from './entities.js';
 import { ITEMS, RECIPES } from './items.js';
 import { sound } from './audio.js';
-import { Renderer3D, WORLD_SCALE } from './renderer3d.js';
+import { Renderer3D, WORLD_SCALE } from './renderer3d.js?v=20261027_02';
 import { TouchControls } from './touchControls.js';
 import * as THREE from './vendor/three.module.js';
 

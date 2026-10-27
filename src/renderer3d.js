@@ -9,9 +9,8 @@ import {
   createBuildingModel,
   createAnimalModel,
   createEnemyModel,
-  createSpiritModel,
   createDroppedItemModel
-} from './models3d.js';
+} from './models3d.js?v=20261027_02';
 import { TILE_SIZE, BIOMES } from './world.js';
 import { ITEMS } from './items.js';
 

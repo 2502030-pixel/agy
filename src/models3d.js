@@ -69,10 +69,10 @@ export const materials = {
   zombiePants: new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.9, flatShading: true }),
   zombieEye: new THREE.MeshBasicMaterial({ color: 0xa3e635 }),
 
-  // 守護精霊
-  spiritCore: new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7, emissiveIntensity: 0.8, roughness: 0.1 }),
-  spiritRing: new THREE.MeshBasicMaterial({ color: 0x7dd3fc, wireframe: true }),
-  spiritWing: new THREE.MeshStandardMaterial({ color: 0xbae6fd, transparent: true, opacity: 0.75, roughness: 0.2, side: THREE.DoubleSide })
+  // 守護精霊（完全非表示・無効化）
+  spiritCore: new THREE.MeshBasicMaterial({ visible: false }),
+  spiritRing: new THREE.MeshBasicMaterial({ visible: false }),
+  spiritWing: new THREE.MeshBasicMaterial({ visible: false })
 };
 
 // プレイヤー 3D モデル
