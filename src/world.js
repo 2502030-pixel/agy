@@ -316,11 +316,11 @@ export class World {
   getSkyColor() {
     const t = this.timeOfDay;
     if (t >= 5 && t < 7.5) {
-      return { r: 255, g: 190, b: 120, a: 0.15 };
+      return { r: 255, g: 195, b: 130, a: 0.15 };
     } else if (t >= 17.5 && t < 20.5) {
-      return { r: 250, g: 110, b: 60, a: 0.22 };
+      return { r: 250, g: 130, b: 80, a: 0.20 };
     } else if (t >= 20.5 || t < 5) {
-      return { r: 20, g: 30, b: 70, a: 0.35 };
+      return { r: 62, g: 91, b: 133, a: 0.25 };
     }
     return null;
   }
