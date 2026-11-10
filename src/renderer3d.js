@@ -23,7 +23,7 @@ export class Renderer3D {
     // シーン
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x87ceeb);
-    this.scene.fog = new THREE.FogExp2(0x87ceeb, 0.012);
+    this.scene.fog = new THREE.FogExp2(0x87ceeb, 0.007);
 
     // レンダラー
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -32,7 +32,7 @@ export class Renderer3D {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.15;
     this.container.appendChild(this.renderer.domElement);
 
     // カメラ（二人称視点カメラ）
@@ -70,6 +70,10 @@ export class Renderer3D {
 
     // プレイヤー 3D
     this.player3D = createPlayerModel();
+    // 夜間でもプレイヤーの周囲や足元が確認できる淡い月光・観察者の光
+    this.playerNightLight = new THREE.PointLight(0xa5c2f0, 0.75, 18, 1.2);
+    this.playerNightLight.position.set(0, 2.0, 0);
+    this.player3D.root.add(this.playerNightLight);
     this.scene.add(this.player3D.root);
 
     // 3D ターゲットレティクル & レイキャスター
@@ -253,16 +257,22 @@ export class Renderer3D {
     const ambientCoeff = world.getAmbientLight();
 
     if (isNight) {
-      // 夜の月光
-      this.sunLight.color.setHex(0x3b5284);
-      this.sunLight.intensity = 0.25;
-      this.ambientLight.color.setHex(0x101a2e);
-      this.ambientLight.intensity = 0.3;
-      this.hemiLight.color.setHex(0x1a2638);
-      this.hemiLight.groundColor.setHex(0x050a12);
-      this.scene.background.setHex(0x060c18);
-      this.scene.fog.color.setHex(0x060c18);
+      // 澄んだ青白い月光（夜の雰囲気と十分な視認性を両立）
+      this.sunLight.color.setHex(0x7e9cd8);
+      this.sunLight.intensity = 0.6;
+      this.ambientLight.color.setHex(0x3d547a);
+      this.ambientLight.intensity = 0.7;
+      this.hemiLight.color.setHex(0x3a5278);
+      this.hemiLight.groundColor.setHex(0x182436);
+      this.scene.background.setHex(0x131d2e);
+      this.scene.fog.color.setHex(0x131d2e);
+      if (this.playerNightLight) {
+        this.playerNightLight.intensity = 0.85;
+      }
     } else {
+      if (this.playerNightLight) {
+        this.playerNightLight.intensity = 0.15;
+      }
       // 昼〜夕暮れ
       const sky = world.getSkyColor();
       if (sky && (time > 16.5 || time < 7.0)) {
@@ -589,7 +599,8 @@ export class Renderer3D {
       const az = a.y * WORLD_SCALE;
       const ay = this.getTerrainHeight(a.x, a.y, world);
       mesh.position.set(ax, ay, az);
-      mesh.rotation.y = -a.angle + Math.PI / 2;
+      const aAngle = (typeof a.angle === 'number' && !isNaN(a.angle)) ? a.angle : (a.facing < 0 ? Math.PI : 0);
+      mesh.rotation.y = -aAngle + Math.PI / 2;
 
       // ウサギのホッピング
       if (a.type === 'rabbit' && a.isMoving) {
@@ -616,7 +627,7 @@ export class Renderer3D {
       let mesh = this.enemyMeshes.get(e._uniqueId);
       if (!mesh) {
         mesh = createEnemyModel(e.type);
-        mesh.userData = { type: e.type, entity: e };
+        mesh.userData = { type: e.type, entity: e, ...mesh.userData };
         this.scene.add(mesh);
         this.enemyMeshes.set(e._uniqueId, mesh);
       }
@@ -625,11 +636,24 @@ export class Renderer3D {
       const ez = e.y * WORLD_SCALE;
       const ey = this.getTerrainHeight(e.x, e.y, world);
       mesh.position.set(ex, ey, ez);
-      mesh.rotation.y = -e.angle + Math.PI / 2;
 
-      // 被ダメージ時の赤色点滅
-      if (e.hurtTimer > 0) {
-        mesh.position.y = ey + 0.1;
+      const eAngle = (typeof e.angle === 'number' && !isNaN(e.angle)) ? e.angle : (e.facing < 0 ? Math.PI : 0);
+      mesh.rotation.y = -eAngle + Math.PI / 2;
+
+      // 敵の頭上HPバー同期（カメラに正対させるビルボード処理）
+      if (mesh.userData.hpBarGroup) {
+        mesh.userData.hpBarGroup.quaternion.copy(this.camera.quaternion);
+      }
+      if (mesh.userData.hpBarFill) {
+        const hpRatio = Math.max(0.001, Math.min(1.0, e.hp / (e.maxHp || 40)));
+        mesh.userData.hpBarFill.scale.x = hpRatio;
+        mesh.userData.hpBarFill.position.x = -(1.14 * (1.0 - hpRatio)) / 2;
+      }
+
+      // 被ダメージ時のシェイク
+      if (e.hitShake > 0) {
+        mesh.position.y = ey + 0.12;
+        mesh.position.x = ex + (Math.random() - 0.5) * 0.2;
       }
     }
   }
