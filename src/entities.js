@@ -283,6 +283,7 @@ export class Animal {
     this.vx = 0;
     this.vy = 0;
     this.facing = 1;
+    this.angle = 0;
     this.wanderTimer = Math.random() * 3;
     this.fleeTimer = 0;
     this.animTime = Math.random() * 10;
@@ -314,6 +315,10 @@ export class Animal {
           this.vy = 0;
         }
       }
+    }
+
+    if (Math.abs(this.vx) > 2 || Math.abs(this.vy) > 2) {
+      this.angle = Math.atan2(this.vy, this.vx);
     }
 
     if (Math.abs(this.vx) > 5) {
@@ -485,6 +490,8 @@ export class Enemy {
     this.attackRange = 34;
     this.hitShake = 0;
     this.facing = 1;
+    this.angle = 0;
+    this.wanderTimer = Math.random() * 2;
     this.animTime = Math.random() * 10;
   }
 
@@ -509,56 +516,79 @@ export class Enemy {
       }
     }
 
-    if (distToPlayer < 380) {
+    let vx = 0;
+    let vy = 0;
+
+    // 索敵範囲内（520px）ならプレイヤーを追尾
+    if (distToPlayer < 520) {
       const angle = Math.atan2(player.y - this.y, player.x - this.x);
-      let vx = Math.cos(angle) * this.speed + avoidFireX;
-      let vy = Math.sin(angle) * this.speed + avoidFireY;
-
-      if (Math.abs(vx) > 5) {
-        this.facing = vx > 0 ? 1 : -1;
+      vx = Math.cos(angle) * this.speed + avoidFireX;
+      vy = Math.sin(angle) * this.speed + avoidFireY;
+    } else {
+      // 索敵範囲外でもプレイヤーの大まかな方向や周辺を徘徊して接近
+      this.wanderTimer -= dt;
+      if (this.wanderTimer <= 0) {
+        this.wanderTimer = 2.5 + Math.random() * 3.5;
+        // 70%の確率でプレイヤーの方向へ大まかに移動、30%はランダム
+        const targetAngle = Math.random() < 0.7 
+          ? Math.atan2(player.y - this.y, player.x - this.x) + (Math.random() - 0.5) * 1.2
+          : Math.random() * Math.PI * 2;
+        this._wanderAngle = targetAngle;
       }
+      if (this._wanderAngle !== undefined) {
+        vx = Math.cos(this._wanderAngle) * (this.speed * 0.45) + avoidFireX;
+        vy = Math.sin(this._wanderAngle) * (this.speed * 0.45) + avoidFireY;
+      }
+    }
 
-      let nextX = this.x + vx * dt;
-      let nextY = this.y + vy * dt;
+    if (Math.abs(vx) > 2 || Math.abs(vy) > 2) {
+      this.angle = Math.atan2(vy, vx);
+    }
 
-      let blocked = false;
-      for (let i = 0; i < buildings.length; i++) {
-        const b = buildings[i];
-        if (b.type === 'wall' || (b.type === 'door' && !b.isOpen)) {
-          if (Math.hypot(nextX - b.x, nextY - b.y) < this.radius + b.radius) {
+    if (Math.abs(vx) > 5) {
+      this.facing = vx > 0 ? 1 : -1;
+    }
+
+    let nextX = this.x + vx * dt;
+    let nextY = this.y + vy * dt;
+
+    let blocked = false;
+    for (let i = 0; i < buildings.length; i++) {
+      const b = buildings[i];
+      if (b.type === 'wall' || (b.type === 'door' && !b.isOpen)) {
+        if (Math.hypot(nextX - b.x, nextY - b.y) < this.radius + b.radius) {
+          blocked = true;
+          if (this.attackCooldown <= 0) {
+            b.hp -= this.damage;
+            this.attackCooldown = 1.1;
+          }
+          break;
+        }
+      }
+    }
+
+    if (!blocked && world.resources) {
+      for (let i = 0; i < world.resources.length; i++) {
+        const res = world.resources[i];
+        if (res.hp <= 0) continue;
+        if (res.type === 'tree' || res.type === 'rock' || res.type === 'iron_rock') {
+          const resRadius = res.type === 'tree' ? 16 : 18;
+          if (Math.hypot(nextX - res.x, nextY - res.y) < this.radius + resRadius) {
             blocked = true;
-            if (this.attackCooldown <= 0) {
-              b.hp -= this.damage;
-              this.attackCooldown = 1.1;
-            }
             break;
           }
         }
       }
+    }
 
-      if (!blocked && world.resources) {
-        for (let i = 0; i < world.resources.length; i++) {
-          const res = world.resources[i];
-          if (res.hp <= 0) continue;
-          if (res.type === 'tree' || res.type === 'rock' || res.type === 'iron_rock') {
-            const resRadius = res.type === 'tree' ? 16 : 18;
-            if (Math.hypot(nextX - res.x, nextY - res.y) < this.radius + resRadius) {
-              blocked = true;
-              break;
-            }
-          }
-        }
-      }
+    if (!blocked && world.isWalkable(nextX, nextY)) {
+      this.x = nextX;
+      this.y = nextY;
+    }
 
-      if (!blocked && world.isWalkable(nextX, nextY)) {
-        this.x = nextX;
-        this.y = nextY;
-      }
-
-      if (distToPlayer <= this.attackRange && this.attackCooldown <= 0) {
-        player.takeDamage(this.damage, this.type === 'wolf' ? '凶暴なオオカミ' : '夜のゾンビ');
-        this.attackCooldown = 1.1;
-      }
+    if (distToPlayer <= this.attackRange && this.attackCooldown <= 0) {
+      player.takeDamage(this.damage, this.type === 'wolf' ? '凶暴なオオカミ' : '夜のゾンビ');
+      this.attackCooldown = 1.1;
     }
   }
 
