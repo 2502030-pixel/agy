@@ -410,14 +410,17 @@ class Game {
   }
 
   spawnEnemy() {
-    const angle = Math.random() * Math.PI * 2;
-    const dist = 420 + Math.random() * 200;
-    const x = this.player.x + Math.cos(angle) * dist;
-    const y = this.player.y + Math.sin(angle) * dist;
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 220 + Math.random() * 140; // 220〜360px: 画面外近傍の適切な距離
+      const x = this.player.x + Math.cos(angle) * dist;
+      const y = this.player.y + Math.sin(angle) * dist;
 
-    if (this.world.isWalkable(x, y)) {
-      const type = Math.random() < 0.6 ? 'zombie' : 'wolf';
-      this.entities.enemies.push(new Enemy(type, x, y));
+      if (this.world.isWalkable(x, y)) {
+        const type = Math.random() < 0.6 ? 'zombie' : 'wolf';
+        this.entities.enemies.push(new Enemy(type, x, y));
+        break;
+      }
     }
   }
 
@@ -1182,7 +1185,10 @@ class Game {
 
     // スポナー
     this.enemySpawnTimer += dt;
-    if (this.world.isNight() && this.entities.enemies.length < 8 && this.enemySpawnTimer > 6.0) {
+    const isNightTime = this.world.isNight();
+    const maxEnemies = isNightTime ? 8 : 2;
+    const spawnThreshold = isNightTime ? 3.5 : 12.0;
+    if (this.entities.enemies.length < maxEnemies && this.enemySpawnTimer > spawnThreshold) {
       this.spawnEnemy();
       this.enemySpawnTimer = 0;
     }
