@@ -23,7 +23,7 @@ export class Renderer3D {
     // シーン
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x87ceeb);
-    this.scene.fog = new THREE.FogExp2(0x87ceeb, 0.007);
+    this.scene.fog = new THREE.FogExp2(0x87ceeb, 0.004);
 
     // レンダラー
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -32,7 +32,7 @@ export class Renderer3D {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.15;
+    this.renderer.toneMappingExposure = 1.25;
     this.container.appendChild(this.renderer.domElement);
 
     // カメラ（二人称視点カメラ）
@@ -239,47 +239,70 @@ export class Renderer3D {
   // 昼夜サイクルとライティング更新
   updateLighting(world, dt) {
     const time = world.timeOfDay;
-    // 太陽の回転角度 (0: 朝, 6: 正午, 12: 夕方, 18: 深夜)
-    const angle = ((time - 6) / 24) * Math.PI * 2;
-    const sunDist = 70;
-
+    const isNight = world.isNight();
     const pX = this.player3D.root.position.x;
     const pZ = this.player3D.root.position.z;
 
-    this.sunLight.position.set(
-      pX + Math.cos(angle) * sunDist,
-      Math.max(2, Math.sin(angle) * sunDist),
-      pZ + Math.sin(angle * 0.5) * 30
-    );
-    this.sunLight.target.position.set(pX, 0, pZ);
-
-    const isNight = world.isNight();
-    const ambientCoeff = world.getAmbientLight();
-
     if (isNight) {
-      // 澄んだ青白い月光（夜の雰囲気と十分な視認性を両立）
-      this.sunLight.color.setHex(0x7e9cd8);
-      this.sunLight.intensity = 0.6;
-      this.ambientLight.color.setHex(0x3d547a);
-      this.ambientLight.intensity = 0.7;
-      this.hemiLight.color.setHex(0x3a5278);
-      this.hemiLight.groundColor.setHex(0x182436);
-      this.scene.background.setHex(0x131d2e);
-      this.scene.fog.color.setHex(0x131d2e);
+      // --- 夜の月明かりシステム ---
+      // 月は夜間、空高く（Y = 40〜65）昇り、美しい青白い光を島全体へ降り注ぐ
+      // 19.5時〜5.0時の夜間サイクルを 0.0〜1.0 に正規化
+      const nightProgress = (time >= 19.5 ? (time - 19.5) : (time + 4.5)) / 9.5;
+      const moonArc = Math.PI * (0.15 + nightProgress * 0.7); // 空を渡る円弧
+      
+      this.sunLight.position.set(
+        pX + Math.cos(moonArc) * 50,
+        Math.sin(moonArc) * 45 + 25, // 常に十分な高度角（Y: 35〜70）を保ち、地面や木々を上空から明るく照らす！
+        pZ + 35
+      );
+      this.sunLight.target.position.set(pX, 0, pZ);
+
+      // 明るく澄んだ美しい月光（青白く輝く満月のような光）
+      this.sunLight.color.setHex(0xb5d0ff);
+      this.sunLight.intensity = 1.1;
+
+      // 環境光（影の中や夜間全体をしっかり明るく照らし、探索・建築・戦闘が快適に行える明るさ）
+      this.ambientLight.color.setHex(0x6e8ebf);
+      this.ambientLight.intensity = 1.0;
+
+      // 半球光（空からの柔らかな月明かり ＋ 地面からの照り返し）
+      this.hemiLight.color.setHex(0x7fa9de);
+      this.hemiLight.groundColor.setHex(0x384a62);
+      this.hemiLight.intensity = 0.9;
+
+      // 夜空とフォグ（神秘的で視界の抜けた美しい夜空色）
+      this.scene.background.setHex(0x1c2b45);
+      this.scene.fog.color.setHex(0x1c2b45);
+
+      // プレイヤー周囲の月光オーラ（足元や近隣オブジェクトをさらにクリアに）
       if (this.playerNightLight) {
-        this.playerNightLight.intensity = 0.85;
+        this.playerNightLight.intensity = 1.1;
+        this.playerNightLight.distance = 26;
       }
     } else {
+      // 昼間〜夕暮れの太陽軌道
+      const angle = ((time - 6) / 24) * Math.PI * 2;
+      const sunDist = 70;
+
+      this.sunLight.position.set(
+        pX + Math.cos(angle) * sunDist,
+        Math.max(15, Math.sin(angle) * sunDist),
+        pZ + Math.sin(angle * 0.5) * 30
+      );
+      this.sunLight.target.position.set(pX, 0, pZ);
+
       if (this.playerNightLight) {
-        this.playerNightLight.intensity = 0.15;
+        this.playerNightLight.intensity = 0.1;
       }
-      // 昼〜夕暮れ
+
       const sky = world.getSkyColor();
       if (sky && (time > 16.5 || time < 7.0)) {
         // 夕焼け・朝焼け
         this.sunLight.color.setRGB(1.0, 0.65, 0.4);
         this.sunLight.intensity = 1.1;
         this.ambientLight.color.setRGB(0.7, 0.5, 0.4);
+        this.ambientLight.intensity = 0.5;
+        this.hemiLight.intensity = 0.4;
         this.scene.background.setRGB(sky.r / 255, sky.g / 255, sky.b / 255);
         this.scene.fog.color.setRGB(sky.r / 255, sky.g / 255, sky.b / 255);
       } else {
@@ -287,7 +310,8 @@ export class Renderer3D {
         this.sunLight.color.setHex(0xfffaed);
         this.sunLight.intensity = 1.35;
         this.ambientLight.color.setHex(0xddeeff);
-        this.ambientLight.intensity = 0.5;
+        this.ambientLight.intensity = 0.55;
+        this.hemiLight.intensity = 0.5;
         this.scene.background.setHex(0x82b9e0);
         this.scene.fog.color.setHex(0x82b9e0);
       }
