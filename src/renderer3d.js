@@ -10,7 +10,7 @@ import {
   createAnimalModel,
   createEnemyModel,
   createDroppedItemModel
-} from './models3d.js?v=20261110_02';
+} from './models3d.js?v=20261110_fix_night03';
 import { TILE_SIZE, BIOMES } from './world.js';
 import { ITEMS } from './items.js';
 
@@ -250,49 +250,52 @@ export class Renderer3D {
     const pZ = this.player3D.root.position.z;
 
     if (isNight) {
-      // --- 夜の月明かりシステム（白夜のように明るく美しい澄んだナイトビジョン） ---
-      // 月は夜間、空高く（Y = 50〜90）昇り、真上から島全体を照らし出す
+      // --- 夜の月明かりシステム（白夜・ファンタジーナイト：昼間と同等以上のクリアな視界） ---
       const nightProgress = (time >= 19.5 ? (time - 19.5) : (time + 4.5)) / 9.5;
       const moonArc = Math.PI * (0.15 + nightProgress * 0.7); // 空を渡る円弧
       
       this.sunLight.position.set(
         pX + Math.cos(moonArc) * 50,
-        Math.sin(moonArc) * 50 + 40, // 常に高い高度角（Y: 50〜90）から真上近くの上空光を注ぐ
+        Math.sin(moonArc) * 50 + 45, // 常に高い高度角（Y: 50〜95）から真上近くの上空光を注ぐ
         pZ + 25
       );
       this.sunLight.target.position.set(pX, 0, pZ);
+      this.sunLight.target.updateMatrixWorld();
 
-      // 明るく澄み渡る純白の満月光（超高出力 2.4 で地上のオブジェクトをクリアに照らす）
-      this.sunLight.color.setHex(0xf4f8ff);
-      this.sunLight.intensity = 2.4;
+      // 夜間は影（シャドウ）の黒ずみ・暗がりを完全排除するため影をオフにして均一な明度を確保
+      this.sunLight.castShadow = false;
 
-      // 環境光（昼間0.55の3.5倍以上！影の奥までしっかりと照らし出し、暗闇のストレスを完全解消）
-      this.ambientLight.color.setHex(0xbcd6fc);
-      this.ambientLight.intensity = 1.95;
+      // 明るく澄み渡る純白の満月光（超高出力 2.2 で地上のオブジェクトをクリアに照らす）
+      this.sunLight.color.setHex(0xffffff);
+      this.sunLight.intensity = 2.2;
+
+      // 環境光（昼間0.55の3.6倍！影の奥までしっかりと照らし出し、暗闇のストレスを完全解消）
+      this.ambientLight.color.setHex(0xd0e6ff);
+      this.ambientLight.intensity = 2.0;
 
       // 半球光（空からの澄んだ月明かり ＋ 地面からの明るい照り返し）
-      this.hemiLight.color.setHex(0xd6e6ff);
-      this.hemiLight.groundColor.setHex(0x7694b8);
-      this.hemiLight.intensity = 1.55;
+      this.hemiLight.color.setHex(0xe4f2ff);
+      this.hemiLight.groundColor.setHex(0x8cb4dc);
+      this.hemiLight.intensity = 1.6;
 
-      // 明るく澄んだ月夜のサファイアブルーの夜空と見通しの良い遠景フォグ
-      this.scene.background.setHex(0x3e5b85);
-      this.scene.fog.color.setHex(0x3e5b85);
-      this.scene.fog.near = 110;
-      this.scene.fog.far = 320;
+      // 昼間のように明るく美しいペールサファイアの夜空と見通しの極めて良い遠景フォグ
+      this.scene.background.setHex(0x527cb3);
+      this.scene.fog.color.setHex(0x527cb3);
+      this.scene.fog.near = 130;
+      this.scene.fog.far = 380;
 
       // プレイヤー周囲の月光オーラ（近接視野を大幅ブースト）
       if (this.playerNightLight) {
-        this.playerNightLight.color.setHex(0xe4f0ff);
+        this.playerNightLight.color.setHex(0xe8f4ff);
         this.playerNightLight.intensity = 3.0;
-        this.playerNightLight.distance = 48;
+        this.playerNightLight.distance = 55;
       }
 
       // 二人称カメラからの夜間視界サポートライト
       if (this.cameraLight) {
-        this.cameraLight.color.setHex(0xdceaff);
-        this.cameraLight.intensity = 1.5;
-        this.cameraLight.distance = 70;
+        this.cameraLight.color.setHex(0xe4f0ff);
+        this.cameraLight.intensity = 2.0;
+        this.cameraLight.distance = 80;
       }
     } else {
       // 昼間〜夕暮れの太陽軌道
@@ -305,6 +308,10 @@ export class Renderer3D {
         pZ + Math.sin(angle * 0.5) * 30
       );
       this.sunLight.target.position.set(pX, 0, pZ);
+      this.sunLight.target.updateMatrixWorld();
+
+      // 昼間はシャドウ有効
+      this.sunLight.castShadow = true;
 
       if (this.playerNightLight) {
         this.playerNightLight.intensity = 0.0;

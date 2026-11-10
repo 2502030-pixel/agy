@@ -1034,11 +1034,6 @@ export function createEnemyModel(type) {
     group.add(leftLeg, rightLeg);
   }
 
-  // 暗闇でも敵の位置がひと目で分かる眼光オーラ・ポイントライト
-  const eyeLight = new THREE.PointLight(type === 'wolf' ? 0xff2222 : 0x22c55e, 0.75, 5.0);
-  eyeLight.position.set(0, type === 'wolf' ? 1.2 : 1.9, 0.6);
-  group.add(eyeLight);
-
   // 敵の頭上HPバー（夜でもターゲットを確実に視認可能）
   const hpBarGroup = new THREE.Group();
   const hpBarBgGeom = new THREE.PlaneGeometry(1.2, 0.16);

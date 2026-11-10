@@ -1,11 +1,11 @@
 // 二人称（Second-Person）3D サバイバルクラフト メインゲームエンジン
-import { World, TILE_SIZE } from './world.js?v=20261110_02';
-import { Player } from './player.js?v=20261110_02';
-import { Building, Animal, Enemy, DroppedItem, Particle, PopupText } from './entities.js?v=20261110_02';
-import { ITEMS, RECIPES } from './items.js?v=20261110_02';
-import { sound } from './audio.js?v=20261110_02';
-import { Renderer3D, WORLD_SCALE } from './renderer3d.js?v=20261110_02';
-import { TouchControls } from './touchControls.js?v=20261110_02';
+import { World, TILE_SIZE } from './world.js?v=20261110_fix_night03';
+import { Player } from './player.js?v=20261110_fix_night03';
+import { Building, Animal, Enemy, DroppedItem, Particle, PopupText } from './entities.js?v=20261110_fix_night03';
+import { ITEMS, RECIPES } from './items.js?v=20261110_fix_night03';
+import { sound } from './audio.js?v=20261110_fix_night03';
+import { Renderer3D, WORLD_SCALE } from './renderer3d.js?v=20261110_fix_night03';
+import { TouchControls } from './touchControls.js?v=20261110_fix_night03';
 import * as THREE from './vendor/three.module.js';
 
 class Game {
@@ -1287,5 +1287,5 @@ class Game {
 
 // ゲーム開始
 window.addEventListener('DOMContentLoaded', () => {
-  new Game();
+  window.game = new Game();
 });

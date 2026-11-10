@@ -320,7 +320,7 @@ export class World {
     } else if (t >= 17.5 && t < 20.5) {
       return { r: 250, g: 130, b: 80, a: 0.20 };
     } else if (t >= 20.5 || t < 5) {
-      return { r: 62, g: 91, b: 133, a: 0.25 };
+      return { r: 82, g: 124, b: 179, a: 0.25 };
     }
     return null;
   }
