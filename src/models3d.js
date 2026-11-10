@@ -58,16 +58,16 @@ export const materials = {
   deerHorn: new THREE.MeshStandardMaterial({ color: 0xfafaf9, roughness: 0.85, flatShading: true }),
   deerHoof: new THREE.MeshStandardMaterial({ color: 0x292524, roughness: 0.9 }),
 
-  wolfFur: new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.8, flatShading: true }),
-  wolfBelly: new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.8, flatShading: true }),
-  wolfMuzzle: new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.85 }),
-  wolfEye: new THREE.MeshBasicMaterial({ color: 0xef4444 }),
+  wolfFur: new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.75, flatShading: true }),
+  wolfBelly: new THREE.MeshStandardMaterial({ color: 0x78889e, roughness: 0.75, flatShading: true }),
+  wolfMuzzle: new THREE.MeshStandardMaterial({ color: 0x243247, roughness: 0.8 }),
+  wolfEye: new THREE.MeshStandardMaterial({ color: 0xff3333, emissive: 0xff0000, emissiveIntensity: 2.5 }),
   wolfFang: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 }),
 
-  zombieSkin: new THREE.MeshStandardMaterial({ color: 0x65a30d, roughness: 0.8, flatShading: true }),
-  zombieShirt: new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.85, flatShading: true }),
-  zombiePants: new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.9, flatShading: true }),
-  zombieEye: new THREE.MeshBasicMaterial({ color: 0xa3e635 }),
+  zombieSkin: new THREE.MeshStandardMaterial({ color: 0x6bb814, roughness: 0.75, flatShading: true }),
+  zombieShirt: new THREE.MeshStandardMaterial({ color: 0x0ea5e9, roughness: 0.8, flatShading: true }),
+  zombiePants: new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.85, flatShading: true }),
+  zombieEye: new THREE.MeshStandardMaterial({ color: 0x86efac, emissive: 0x22c55e, emissiveIntensity: 2.5 }),
 
   // 守護精霊（完全非表示・無効化）
   spiritCore: new THREE.MeshBasicMaterial({ visible: false }),
@@ -1033,6 +1033,40 @@ export function createEnemyModel(type) {
     rightLeg.castShadow = true;
     group.add(leftLeg, rightLeg);
   }
+
+  // 暗闇でも敵の位置がひと目で分かる眼光オーラ・ポイントライト
+  const eyeLight = new THREE.PointLight(type === 'wolf' ? 0xff2222 : 0x22c55e, 0.75, 5.0);
+  eyeLight.position.set(0, type === 'wolf' ? 1.2 : 1.9, 0.6);
+  group.add(eyeLight);
+
+  // 敵の頭上HPバー（夜でもターゲットを確実に視認可能）
+  const hpBarGroup = new THREE.Group();
+  const hpBarBgGeom = new THREE.PlaneGeometry(1.2, 0.16);
+  const hpBarBgMat = new THREE.MeshBasicMaterial({ color: 0x0f172a, side: THREE.DoubleSide, depthTest: false });
+  const hpBarBg = new THREE.Mesh(hpBarBgGeom, hpBarBgMat);
+  hpBarBg.renderOrder = 999;
+  hpBarGroup.add(hpBarBg);
+
+  const hpBarFillGeom = new THREE.PlaneGeometry(1.14, 0.12);
+  const hpBarFillMat = new THREE.MeshBasicMaterial({
+    color: type === 'wolf' ? 0xef4444 : 0x22c55e,
+    side: THREE.DoubleSide,
+    depthTest: false
+  });
+  const hpBarFill = new THREE.Mesh(hpBarFillGeom, hpBarFillMat);
+  hpBarFill.position.z = 0.01;
+  hpBarFill.renderOrder = 1000;
+  hpBarGroup.add(hpBarFill);
+
+  hpBarGroup.position.y = type === 'wolf' ? 1.85 : 2.55;
+  group.add(hpBarGroup);
+
+  group.userData = {
+    type,
+    hpBarFill,
+    hpBarGroup,
+    eyeLight
+  };
 
   return group;
 }
