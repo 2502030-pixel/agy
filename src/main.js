@@ -1,11 +1,11 @@
 // 二人称（Second-Person）3D サバイバルクラフト メインゲームエンジン
-import { World, TILE_SIZE } from './world.js?v=20261117_fix_freeze';
-import { Player } from './player.js?v=20261117_fix_freeze';
-import { Building, Animal, Enemy, DroppedItem, Particle, PopupText } from './entities.js?v=20261117_fix_freeze';
-import { ITEMS, RECIPES } from './items.js?v=20261117_fix_freeze';
-import { sound } from './audio.js?v=20261117_fix_freeze';
-import { Renderer3D, WORLD_SCALE } from './renderer3d.js?v=20261117_fix_freeze';
-import { TouchControls } from './touchControls.js?v=20261117_fix_freeze';
+import { World, TILE_SIZE } from './world.js?v=20261117_night_lighting';
+import { Player } from './player.js?v=20261117_night_lighting';
+import { Building, Animal, Enemy, DroppedItem, Particle, PopupText } from './entities.js?v=20261117_night_lighting';
+import { ITEMS, RECIPES } from './items.js?v=20261117_night_lighting';
+import { sound } from './audio.js?v=20261117_night_lighting';
+import { Renderer3D, WORLD_SCALE } from './renderer3d.js?v=20261117_night_lighting';
+import { TouchControls } from './touchControls.js?v=20261117_night_lighting';
 import * as THREE from './vendor/three.module.js';
 
 class Game {
