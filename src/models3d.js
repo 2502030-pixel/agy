@@ -1059,8 +1059,7 @@ export function createEnemyModel(type) {
   group.userData = {
     type,
     hpBarFill,
-    hpBarGroup,
-    eyeLight
+    hpBarGroup
   };
 
   return group;

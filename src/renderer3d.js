@@ -10,7 +10,7 @@ import {
   createAnimalModel,
   createEnemyModel,
   createDroppedItemModel
-} from './models3d.js?v=20261110_fix_night03';
+} from './models3d.js?v=20261117_fix_freeze';
 import { TILE_SIZE, BIOMES } from './world.js';
 import { ITEMS } from './items.js';
 
