@@ -97,13 +97,15 @@ canvas#gameCanvas {
   gap: 10px;
 }
 
-/* 日時・天候ピル */
+/* 日時・天候ピル（時間帯に応じたスムーズなカラーグロー遷移） */
 #time-display {
   letter-spacing: 0.3px;
+  transition: border-color 1.2s ease, box-shadow 1.2s ease, background 1.2s ease;
 }
 
 #sun-moon-icon {
   font-size: 16px;
+  transition: transform 0.3s ease;
 }
 
 #day-counter {
@@ -119,6 +121,80 @@ canvas#gameCanvas {
 #clock-display {
   font-variant-numeric: tabular-nums;
   color: #e2e8f0;
+  font-weight: 600;
+}
+
+/* 時間帯バッジ（朝焼け・朝・昼・夕暮れ・黄昏・夜・深夜） */
+.time-phase-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  transition: all 0.8s ease;
+}
+
+/* 時間帯ごとのテーマスタイル */
+#time-display.phase-dawn {
+  border-color: rgba(249, 115, 22, 0.45);
+  box-shadow: 0 4px 16px rgba(249, 115, 22, 0.22);
+}
+#time-display.phase-dawn .time-phase-badge {
+  background: rgba(249, 115, 22, 0.2);
+  color: #fdba74;
+}
+
+#time-display.phase-morning {
+  border-color: rgba(56, 189, 248, 0.4);
+  box-shadow: 0 4px 16px rgba(56, 189, 248, 0.18);
+}
+#time-display.phase-morning .time-phase-badge {
+  background: rgba(56, 189, 248, 0.2);
+  color: #7dd3fc;
+}
+
+#time-display.phase-noon {
+  border-color: rgba(250, 204, 21, 0.45);
+  box-shadow: 0 4px 16px rgba(250, 204, 21, 0.2);
+}
+#time-display.phase-noon .time-phase-badge {
+  background: rgba(250, 204, 21, 0.2);
+  color: #fde047;
+}
+
+#time-display.phase-sunset {
+  border-color: rgba(244, 63, 94, 0.45);
+  box-shadow: 0 4px 16px rgba(244, 63, 94, 0.22);
+}
+#time-display.phase-sunset .time-phase-badge {
+  background: rgba(244, 63, 94, 0.2);
+  color: #fda4af;
+}
+
+#time-display.phase-dusk {
+  border-color: rgba(168, 85, 247, 0.45);
+  box-shadow: 0 4px 16px rgba(168, 85, 247, 0.22);
+}
+#time-display.phase-dusk .time-phase-badge {
+  background: rgba(168, 85, 247, 0.2);
+  color: #d8b4fe;
+}
+
+#time-display.phase-night {
+  border-color: rgba(99, 102, 241, 0.45);
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.22);
+}
+#time-display.phase-night .time-phase-badge {
+  background: rgba(99, 102, 241, 0.2);
+  color: #a5b4fc;
+}
+
+#time-display.phase-midnight {
+  border-color: rgba(79, 70, 229, 0.4);
+  box-shadow: 0 4px 16px rgba(79, 70, 229, 0.18);
+}
+#time-display.phase-midnight .time-phase-badge {
+  background: rgba(79, 70, 229, 0.2);
+  color: #c7d2fe;
 }
 
 /* クエスト目標ピル */
