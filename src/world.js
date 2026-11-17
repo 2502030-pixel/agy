@@ -302,24 +302,24 @@ export class World {
   getAmbientLight() {
     const t = this.timeOfDay;
     if (t >= 4.5 && t < 7) {
-      return 0.18 + ((t - 4.5) / 2.5) * 0.82;
+      return 0.25 + ((t - 4.5) / 2.5) * 0.75;
     }
-    if (t >= 7 && t < 17.5) {
+    if (t >= 7 && t < 17.0) {
       return 1.0;
     }
-    if (t >= 17.5 && t < 20.5) {
-      return 1.0 - ((t - 17.5) / 3.0) * 0.82;
+    if (t >= 17.0 && t < 20.0) {
+      return 1.0 - ((t - 17.0) / 3.0) * 0.75;
     }
-    return 0.18;
+    return 0.25;
   }
 
   getSkyColor() {
     const t = this.timeOfDay;
     if (t >= 5 && t < 7.5) {
       return { r: 255, g: 195, b: 130, a: 0.15 };
-    } else if (t >= 17.5 && t < 20.5) {
+    } else if (t >= 17.0 && t < 20.0) {
       return { r: 250, g: 130, b: 80, a: 0.20 };
-    } else if (t >= 20.5 || t < 5) {
+    } else if (t >= 20.0 || t < 5) {
       return { r: 20, g: 30, b: 48, a: 0.28 };
     }
     return null;
@@ -329,6 +329,26 @@ export class World {
     const hours = Math.floor(this.timeOfDay);
     const minutes = Math.floor((this.timeOfDay - hours) * 60);
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  }
+
+  // 時間帯の詳細情報（アイコン・時間帯名称・時間帯ID・夜フラグ）
+  getTimePhaseInfo() {
+    const t = this.timeOfDay;
+    if (t >= 4.5 && t < 6.5) {
+      return { id: 'dawn', name: '朝焼け', icon: '🌅', isNight: false };
+    } else if (t >= 6.5 && t < 10.5) {
+      return { id: 'morning', name: '朝', icon: '🌤️', isNight: false };
+    } else if (t >= 10.5 && t < 16.5) {
+      return { id: 'noon', name: '昼', icon: '☀️', isNight: false };
+    } else if (t >= 16.5 && t < 18.5) {
+      return { id: 'sunset', name: '夕暮れ', icon: '🌇', isNight: false };
+    } else if (t >= 18.5 && t < 20.0) {
+      return { id: 'dusk', name: '黄昏', icon: '🌆', isNight: true };
+    } else if (t >= 20.0 && t < 23.5) {
+      return { id: 'night', name: '夜', icon: '🌙', isNight: true };
+    } else {
+      return { id: 'midnight', name: '深夜', icon: '🌌', isNight: true };
+    }
   }
 
   isNight() {
