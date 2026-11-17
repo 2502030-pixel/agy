@@ -16,6 +16,256 @@ import { ITEMS } from './items.js';
 
 export const WORLD_SCALE = 2.0 / TILE_SIZE; // 2Dピクセル座標から3Dユニットへの変換係数
 
+// 24時間スムーズ昼夜サイクル キーフレーム定義（完全連続補間）
+const TIME_KEYFRAMES = [
+  {
+    t: 0.0,
+    sky: 0x121b2d,
+    fog: 0x121b2d,
+    fogNear: 55,
+    fogFar: 220,
+    sunIntensity: 0.0,
+    sunColor: 0xffaa66,
+    moonIntensity: 0.65,
+    moonColor: 0x92b2de,
+    ambientColor: 0x324765,
+    ambientIntensity: 0.42,
+    hemiSky: 0x3d5478,
+    hemiGround: 0x182535,
+    hemiIntensity: 0.45,
+    nightFactor: 1.0,
+    starOpacity: 0.95
+  },
+  {
+    t: 4.0,
+    sky: 0x141e33,
+    fog: 0x141e33,
+    fogNear: 55,
+    fogFar: 225,
+    sunIntensity: 0.0,
+    sunColor: 0xff9944,
+    moonIntensity: 0.60,
+    moonColor: 0x92b2de,
+    ambientColor: 0x324765,
+    ambientIntensity: 0.42,
+    hemiSky: 0x3d5478,
+    hemiGround: 0x182535,
+    hemiIntensity: 0.45,
+    nightFactor: 1.0,
+    starOpacity: 0.90
+  },
+  {
+    t: 5.2,
+    sky: 0x382c48,
+    fog: 0x382c48,
+    fogNear: 58,
+    fogFar: 230,
+    sunIntensity: 0.15,
+    sunColor: 0xff7e44,
+    moonIntensity: 0.35,
+    moonColor: 0x829fc4,
+    ambientColor: 0x483a52,
+    ambientIntensity: 0.48,
+    hemiSky: 0x4c3d5c,
+    hemiGround: 0x1f1d2b,
+    hemiIntensity: 0.48,
+    nightFactor: 0.7,
+    starOpacity: 0.50
+  },
+  {
+    t: 6.2,
+    sky: 0xdf6e43,
+    fog: 0xdf6e43,
+    fogNear: 65,
+    fogFar: 245,
+    sunIntensity: 1.10,
+    sunColor: 0xffa45c,
+    moonIntensity: 0.05,
+    moonColor: 0x829fc4,
+    ambientColor: 0x7c5848,
+    ambientIntensity: 0.68,
+    hemiSky: 0x9c6852,
+    hemiGround: 0x382b24,
+    hemiIntensity: 0.62,
+    nightFactor: 0.1,
+    starOpacity: 0.0
+  },
+  {
+    t: 7.5,
+    sky: 0x7ab6e8,
+    fog: 0x7ab6e8,
+    fogNear: 70,
+    fogFar: 260,
+    sunIntensity: 1.30,
+    sunColor: 0xfff0d8,
+    moonIntensity: 0.0,
+    moonColor: 0x92b2de,
+    ambientColor: 0xccdeef,
+    ambientIntensity: 0.52,
+    hemiSky: 0xebf5ff,
+    hemiGround: 0x485844,
+    hemiIntensity: 0.50,
+    nightFactor: 0.0,
+    starOpacity: 0.0
+  },
+  {
+    t: 12.0,
+    sky: 0x68ade8,
+    fog: 0x68ade8,
+    fogNear: 70,
+    fogFar: 260,
+    sunIntensity: 1.35,
+    sunColor: 0xfffaed,
+    moonIntensity: 0.0,
+    moonColor: 0x92b2de,
+    ambientColor: 0xddeeff,
+    ambientIntensity: 0.55,
+    hemiSky: 0xffffff,
+    hemiGround: 0x4c5e48,
+    hemiIntensity: 0.50,
+    nightFactor: 0.0,
+    starOpacity: 0.0
+  },
+  {
+    t: 16.0,
+    sky: 0x7ebae6,
+    fog: 0x7ebae6,
+    fogNear: 70,
+    fogFar: 260,
+    sunIntensity: 1.32,
+    sunColor: 0xffe6b8,
+    moonIntensity: 0.0,
+    moonColor: 0x92b2de,
+    ambientColor: 0xd6d2c4,
+    ambientIntensity: 0.56,
+    hemiSky: 0xf5ebd5,
+    hemiGround: 0x4c463a,
+    hemiIntensity: 0.52,
+    nightFactor: 0.0,
+    starOpacity: 0.0
+  },
+  {
+    t: 17.5,
+    sky: 0xee783e,
+    fog: 0xee783e,
+    fogNear: 66,
+    fogFar: 250,
+    sunIntensity: 1.25,
+    sunColor: 0xff7e38,
+    moonIntensity: 0.10,
+    moonColor: 0x92b2de,
+    ambientColor: 0x825442,
+    ambientIntensity: 0.68,
+    hemiSky: 0x9a583e,
+    hemiGround: 0x362822,
+    hemiIntensity: 0.60,
+    nightFactor: 0.1,
+    starOpacity: 0.0
+  },
+  {
+    t: 18.8,
+    sky: 0x62335f,
+    fog: 0x62335f,
+    fogNear: 60,
+    fogFar: 235,
+    sunIntensity: 0.45,
+    sunColor: 0xd85656,
+    moonIntensity: 0.35,
+    moonColor: 0x92b2de,
+    ambientColor: 0x45354e,
+    ambientIntensity: 0.48,
+    hemiSky: 0x4e3a62,
+    hemiGround: 0x201e2c,
+    hemiIntensity: 0.48,
+    nightFactor: 0.5,
+    starOpacity: 0.35
+  },
+  {
+    t: 20.0,
+    sky: 0x1a243a,
+    fog: 0x1a243a,
+    fogNear: 56,
+    fogFar: 222,
+    sunIntensity: 0.05,
+    sunColor: 0x994444,
+    moonIntensity: 0.62,
+    moonColor: 0x92b2de,
+    ambientColor: 0x324765,
+    ambientIntensity: 0.42,
+    hemiSky: 0x3d5478,
+    hemiGround: 0x182535,
+    hemiIntensity: 0.45,
+    nightFactor: 0.95,
+    starOpacity: 0.85
+  },
+  {
+    t: 24.0,
+    sky: 0x121b2d,
+    fog: 0x121b2d,
+    fogNear: 55,
+    fogFar: 220,
+    sunIntensity: 0.0,
+    sunColor: 0xffaa66,
+    moonIntensity: 0.65,
+    moonColor: 0x92b2de,
+    ambientColor: 0x324765,
+    ambientIntensity: 0.42,
+    hemiSky: 0x3d5478,
+    hemiGround: 0x182535,
+    hemiIntensity: 0.45,
+    nightFactor: 1.0,
+    starOpacity: 0.95
+  }
+];
+
+const _tmpColorA = new THREE.Color();
+const _tmpColorB = new THREE.Color();
+
+function interpolateDayNightConfig(timeOfDay) {
+  let t = timeOfDay % 24.0;
+  if (t < 0) t += 24.0;
+
+  let kf1 = TIME_KEYFRAMES[0];
+  let kf2 = TIME_KEYFRAMES[TIME_KEYFRAMES.length - 1];
+
+  for (let i = 0; i < TIME_KEYFRAMES.length - 1; i++) {
+    if (t >= TIME_KEYFRAMES[i].t && t <= TIME_KEYFRAMES[i + 1].t) {
+      kf1 = TIME_KEYFRAMES[i];
+      kf2 = TIME_KEYFRAMES[i + 1];
+      break;
+    }
+  }
+
+  const range = kf2.t - kf1.t;
+  const alpha = range === 0 ? 0 : (t - kf1.t) / range;
+  const smoothAlpha = alpha * alpha * (3 - 2 * alpha);
+
+  const lerpCol = (hex1, hex2) => {
+    _tmpColorA.setHex(hex1);
+    _tmpColorB.setHex(hex2);
+    return _tmpColorA.lerp(_tmpColorB, smoothAlpha);
+  };
+  const lerpNum = (v1, v2) => v1 + (v2 - v1) * smoothAlpha;
+
+  return {
+    skyColor: lerpCol(kf1.sky, kf2.sky).clone(),
+    fogColor: lerpCol(kf1.fog, kf2.fog).clone(),
+    fogNear: lerpNum(kf1.fogNear, kf2.fogNear),
+    fogFar: lerpNum(kf1.fogFar, kf2.fogFar),
+    sunIntensity: lerpNum(kf1.sunIntensity, kf2.sunIntensity),
+    sunColor: lerpCol(kf1.sunColor, kf2.sunColor).clone(),
+    moonIntensity: lerpNum(kf1.moonIntensity, kf2.moonIntensity),
+    moonColor: lerpCol(kf1.moonColor, kf2.moonColor).clone(),
+    ambientColor: lerpCol(kf1.ambientColor, kf2.ambientColor).clone(),
+    ambientIntensity: lerpNum(kf1.ambientIntensity, kf2.ambientIntensity),
+    hemiSkyColor: lerpCol(kf1.hemiSky, kf2.hemiSky).clone(),
+    hemiGroundColor: lerpCol(kf1.hemiGround, kf2.hemiGround).clone(),
+    hemiIntensity: lerpNum(kf1.hemiIntensity, kf2.hemiIntensity),
+    nightFactor: lerpNum(kf1.nightFactor, kf2.nightFactor),
+    starOpacity: lerpNum(kf1.starOpacity, kf2.starOpacity)
+  };
+}
+
 export class Renderer3D {
   constructor(canvasContainer) {
     this.container = canvasContainer;
@@ -105,13 +355,13 @@ export class Renderer3D {
     this.hemiLight = new THREE.HemisphereLight(0xffffff, 0x444455, 0.35);
     this.scene.add(this.hemiLight);
 
-    // 太陽 / 月光 (DirectionalLight)
-    this.sunLight = new THREE.DirectionalLight(0xfffaed, 1.3);
+    // 太陽光 (DirectionalLight)
+    this.sunLight = new THREE.DirectionalLight(0xfffaed, 1.35);
     this.sunLight.castShadow = true;
     this.sunLight.shadow.mapSize.width = 2048;
     this.sunLight.shadow.mapSize.height = 2048;
     this.sunLight.shadow.camera.near = 0.5;
-    this.sunLight.shadow.camera.far = 120;
+    this.sunLight.shadow.camera.far = 160;
     const d = 35;
     this.sunLight.shadow.camera.left = -d;
     this.sunLight.shadow.camera.right = d;
@@ -120,6 +370,83 @@ export class Renderer3D {
     this.sunLight.shadow.bias = -0.0005;
     this.scene.add(this.sunLight);
     this.scene.add(this.sunLight.target);
+
+    // 月光 (DirectionalLight)
+    this.moonLight = new THREE.DirectionalLight(0x92b2de, 0.65);
+    this.moonLight.castShadow = false;
+    this.scene.add(this.moonLight);
+    this.scene.add(this.moonLight.target);
+
+    // 太陽・月・星空の天球オブジェクト初期化
+    this.initCelestialSky();
+  }
+
+  initCelestialSky() {
+    this.skyDomeGroup = new THREE.Group();
+    this.scene.add(this.skyDomeGroup);
+
+    // 1. 太陽メッシュ（輝く球体＋コロナ光輪）
+    this.sunGroup = new THREE.Group();
+    const sunGeom = new THREE.SphereGeometry(6.5, 20, 20);
+    this.sunMat = new THREE.MeshBasicMaterial({ color: 0xfff6dd, depthWrite: false });
+    const sunCore = new THREE.Mesh(sunGeom, this.sunMat);
+    this.sunGroup.add(sunCore);
+
+    const sunHaloGeom = new THREE.RingGeometry(6.5, 13.5, 32);
+    this.sunHaloMat = new THREE.MeshBasicMaterial({
+      color: 0xffaa44,
+      transparent: true,
+      opacity: 0.45,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+    const sunHalo = new THREE.Mesh(sunHaloGeom, this.sunHaloMat);
+    this.sunGroup.add(sunHalo);
+    this.skyDomeGroup.add(this.sunGroup);
+
+    // 2. 月メッシュ（青白く澄んだ月球＋月光オーラ）
+    this.moonGroup = new THREE.Group();
+    const moonGeom = new THREE.SphereGeometry(5.2, 20, 20);
+    this.moonMat = new THREE.MeshBasicMaterial({ color: 0xdff0ff, depthWrite: false });
+    const moonCore = new THREE.Mesh(moonGeom, this.moonMat);
+    this.moonGroup.add(moonCore);
+
+    const moonHaloGeom = new THREE.RingGeometry(5.2, 10.5, 32);
+    this.moonHaloMat = new THREE.MeshBasicMaterial({
+      color: 0x90c0ff,
+      transparent: true,
+      opacity: 0.40,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+    const moonHalo = new THREE.Mesh(moonHaloGeom, this.moonHaloMat);
+    this.moonGroup.add(moonHalo);
+    this.skyDomeGroup.add(this.moonGroup);
+
+    // 3. 星空パーティクル（夜空のきらめく星々）
+    const starCount = 750;
+    const starPositions = new Float32Array(starCount * 3);
+    for (let i = 0; i < starCount; i++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(Math.random() * 0.88 + 0.05); // 水平線より上空
+      const r = 180 + Math.random() * 30;
+
+      starPositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      starPositions[i * 3 + 1] = r * Math.cos(phi);
+      starPositions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+    }
+
+    const starGeom = new THREE.BufferGeometry();
+    starGeom.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+    this.starMat = new THREE.PointsMaterial({
+      color: 0xffffff,
+      size: 2.2,
+      transparent: true,
+      opacity: 0.0,
+      depthWrite: false
+    });
+    this.starPoints = new THREE.Points(starGeom, this.starMat);
+    this.skyDomeGroup.add(this.starPoints);
   }
 
   initReticle() {
@@ -242,107 +569,97 @@ export class Renderer3D {
     }
   }
 
-  // 昼夜サイクルとライティング更新
+  // 昼夜サイクルとライティング更新（24時間連続スムーズ補間＆天体運行）
   updateLighting(world, dt) {
     const time = world.timeOfDay;
-    const isNight = world.isNight();
     const pX = this.player3D.root.position.x;
     const pZ = this.player3D.root.position.z;
 
-    if (isNight) {
-      // --- 夜の月明かりシステム（夜らしい薄暗さと雰囲気を醸し出しつつ、確実な視認性を両立） ---
-      const nightProgress = (time >= 19.5 ? (time - 19.5) : (time + 4.5)) / 9.5;
-      const moonArc = Math.PI * (0.15 + nightProgress * 0.7); // 空を渡る円弧
-      
-      this.sunLight.position.set(
-        pX + Math.cos(moonArc) * 50,
-        Math.sin(moonArc) * 50 + 42,
-        pZ + 25
-      );
-      this.sunLight.target.position.set(pX, 0, pZ);
-      this.sunLight.target.updateMatrixWorld();
+    const cfg = interpolateDayNightConfig(time);
 
-      // 夜間は影（シャドウ）の黒ずみ・暗がりを完全排除するため影をオフにして均一な明度を確保
-      this.sunLight.castShadow = false;
+    // プレイヤーの頭上に天球ドームを追従
+    if (this.skyDomeGroup) {
+      this.skyDomeGroup.position.set(pX, 0, pZ);
+    }
 
-      // 澄んだ青白い月明かり（夜の陰影を適度に与えつつ、眩しすぎない落ち着いた光量）
-      this.sunLight.color.setHex(0x92b2de);
-      this.sunLight.intensity = 0.65;
+    // 太陽と月の天球軌道（06:00昇る、12:00南中、18:00沈む）
+    const sunAngle = ((time - 6.0) / 24.0) * Math.PI * 2;
+    const orbitRadius = 155;
+    const orbitDepth = 45;
 
-      // 環境光（黒つぶれを防ぎ、夜の陰影と適度な薄暗さを両立）
-      this.ambientLight.color.setHex(0x324765);
-      this.ambientLight.intensity = 0.42;
+    const sunX = Math.cos(sunAngle) * orbitRadius;
+    const sunY = Math.sin(sunAngle) * orbitRadius;
+    const sunZ = Math.cos(sunAngle * 0.5) * orbitDepth;
 
-      // 半球光（上空の月夜光 ＋ 地面の薄明かり）
-      this.hemiLight.color.setHex(0x3d5478);
-      this.hemiLight.groundColor.setHex(0x182535);
-      this.hemiLight.intensity = 0.45;
+    // 月は太陽の対角（180度反対）
+    const moonAngle = sunAngle + Math.PI;
+    const moonX = Math.cos(moonAngle) * orbitRadius;
+    const moonY = Math.sin(moonAngle) * orbitRadius;
+    const moonZ = Math.cos(moonAngle * 0.5) * orbitDepth;
 
-      // 深みのあるミッドナイトブルーの夜空と見通しの良い適度な夜霧
-      this.scene.background.setHex(0x141e30);
-      this.scene.fog.color.setHex(0x141e30);
-      this.scene.fog.near = 55;
-      this.scene.fog.far = 220;
+    // 太陽メッシュ更新
+    if (this.sunGroup) {
+      this.sunGroup.position.set(sunX, sunY, sunZ);
+      this.sunGroup.lookAt(0, 0, 0);
+      this.sunMat.color.copy(cfg.sunColor);
+      this.sunHaloMat.color.copy(cfg.sunColor);
+      this.sunGroup.visible = (sunY > -12);
+    }
 
-      // プレイヤー周囲の月光オーラ（近接視野の確実な視認性サポート：手元・足元を柔らかく照らす）
-      if (this.playerNightLight) {
-        this.playerNightLight.color.setHex(0xa8ccf5);
-        this.playerNightLight.intensity = 0.85;
-        this.playerNightLight.distance = 24;
-      }
+    // 月メッシュ更新
+    if (this.moonGroup) {
+      this.moonGroup.position.set(moonX, moonY, moonZ);
+      this.moonGroup.lookAt(0, 0, 0);
+      this.moonGroup.visible = (moonY > -12);
+    }
 
-      // 二人称カメラからの夜間視界サポートライト（観察者視点の薄明かりサポート）
-      if (this.cameraLight) {
-        this.cameraLight.color.setHex(0x9ec0ea);
-        this.cameraLight.intensity = 0.45;
-        this.cameraLight.distance = 45;
-      }
-    } else {
-      // 昼間〜夕暮れの太陽軌道
-      const angle = ((time - 6) / 24) * Math.PI * 2;
-      const sunDist = 70;
+    // 星空パーティクル更新（夜空のきらめき効果）
+    if (this.starMat) {
+      const twinkle = Math.sin(performance.now() * 0.003) * 0.06;
+      this.starMat.opacity = Math.max(0.0, Math.min(1.0, cfg.starOpacity + twinkle));
+      this.starPoints.visible = (this.starMat.opacity > 0.01);
+    }
 
-      this.sunLight.position.set(
-        pX + Math.cos(angle) * sunDist,
-        Math.max(15, Math.sin(angle) * sunDist),
-        pZ + Math.sin(angle * 0.5) * 30
-      );
-      this.sunLight.target.position.set(pX, 0, pZ);
-      this.sunLight.target.updateMatrixWorld();
+    // 太陽光（DirectionalLight）
+    this.sunLight.position.set(pX + sunX * 0.6, Math.max(2.0, sunY * 0.6), pZ + sunZ * 0.6);
+    this.sunLight.target.position.set(pX, 0, pZ);
+    this.sunLight.target.updateMatrixWorld();
+    this.sunLight.color.copy(cfg.sunColor);
+    this.sunLight.intensity = cfg.sunIntensity;
+    // 太陽が地平線より上にあり十分な光量がある時のみ影を落とす
+    this.sunLight.castShadow = (sunY > 4.0 && cfg.sunIntensity > 0.15);
 
-      // 昼間はシャドウ有効
-      this.sunLight.castShadow = true;
+    // 月光（DirectionalLight）
+    this.moonLight.position.set(pX + moonX * 0.5, Math.max(20.0, moonY * 0.5), pZ + moonZ * 0.5);
+    this.moonLight.target.position.set(pX, 0, pZ);
+    this.moonLight.target.updateMatrixWorld();
+    this.moonLight.color.copy(cfg.moonColor);
+    this.moonLight.intensity = cfg.moonIntensity;
 
-      if (this.playerNightLight) {
-        this.playerNightLight.intensity = 0.0;
-      }
-      if (this.cameraLight) {
-        this.cameraLight.intensity = 0.0;
-      }
+    // 環境光・半球光
+    this.ambientLight.color.copy(cfg.ambientColor);
+    this.ambientLight.intensity = cfg.ambientIntensity;
 
-      this.scene.fog.near = 70;
-      this.scene.fog.far = 260;
+    this.hemiLight.color.copy(cfg.hemiSkyColor);
+    this.hemiLight.groundColor.copy(cfg.hemiGroundColor);
+    this.hemiLight.intensity = cfg.hemiIntensity;
 
-      const sky = world.getSkyColor();
-      if (sky && (time > 16.5 || time < 7.0)) {
-        // 夕焼け・朝焼け（薄暗くならず見通しを確保）
-        this.sunLight.color.setRGB(1.0, 0.72, 0.48);
-        this.sunLight.intensity = 1.3;
-        this.ambientLight.color.setRGB(0.85, 0.65, 0.55);
-        this.ambientLight.intensity = 0.85;
-        this.hemiLight.intensity = 0.75;
-        this.scene.background.setRGB(sky.r / 255, sky.g / 255, sky.b / 255);
-        this.scene.fog.color.setRGB(sky.r / 255, sky.g / 255, sky.b / 255);
-      } else {
-        // 昼間
-        this.sunLight.color.setHex(0xfffaed);
-        this.sunLight.intensity = 1.35;
-        this.ambientLight.color.setHex(0xddeeff);
-        this.ambientLight.intensity = 0.55;
-        this.hemiLight.intensity = 0.5;
-        this.scene.background.setHex(0x82b9e0);
-        this.scene.fog.color.setHex(0x82b9e0);
-      }
+    // 空とフォグ
+    this.scene.background.copy(cfg.skyColor);
+    this.scene.fog.color.copy(cfg.fogColor);
+    this.scene.fog.near = cfg.fogNear;
+    this.scene.fog.far = cfg.fogFar;
+
+    // 夜間サポートライト（薄暗さと確実な視認性を両立しつつ滑らかにフェード）
+    if (this.playerNightLight) {
+      this.playerNightLight.intensity = cfg.nightFactor * 0.85;
+      this.playerNightLight.color.setHex(0xa8ccf5);
+      this.playerNightLight.distance = 24;
+    }
+    if (this.cameraLight) {
+      this.cameraLight.intensity = cfg.nightFactor * 0.45;
+      this.cameraLight.color.setHex(0x9ec0ea);
+      this.cameraLight.distance = 45;
     }
 
     // 波のアニメーション
